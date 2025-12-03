@@ -5,9 +5,9 @@ import { BottomNav } from "./components/layout/BottomNav";
 import { GoogleMapView } from "./components/map/GoogleMapView";
 
 const filters = [
-  { id: "near", label: "Near me", icon: "📍", active: true },
-  { id: "trending", label: "Trending", icon: "🔥", active: false },
-  { id: "new", label: "New", icon: "✨", active: false },
+  { id: "near", label: "Near me", active: true },
+  { id: "trending", label: "Trending", active: false },
+  { id: "new", label: "New", active: false },
 ];
 
 export default function Home() {
@@ -46,7 +46,6 @@ export default function Home() {
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
             >
-              <span>{filter.icon}</span>
               {filter.label}
             </button>
           ))}
