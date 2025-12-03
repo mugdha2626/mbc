@@ -1,0 +1,8 @@
+{
+  "version": "1",
+  "name": "tmap",
+  "iconUrl": "https://tmap.app/icon.png",
+  "splashImageUrl": "https://tmap.app/splash.png",
+  "splashBackgroundColor": "#000000",
+  "homeUrl": "https://tmap.app"
+}
