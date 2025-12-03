@@ -43,12 +43,27 @@ export function FarcasterProvider({
 
         // Extract user info if available
         if (context?.user) {
-          setUser({
+          const userData = {
             fid: context.user.fid,
             username: context.user.username,
             displayName: context.user.displayName,
             pfpUrl: context.user.pfpUrl,
-          });
+          };
+          setUser(userData);
+
+          // Sync user to our MongoDB (Farcaster handles auth, we just store app data)
+          try {
+            await fetch("/api/auth/sync", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                fid: userData.fid,
+                username: userData.username,
+              }),
+            });
+          } catch (err) {
+            console.error("Failed to save user to database:", err);
+          }
         }
 
         setIsSDKLoaded(true);
