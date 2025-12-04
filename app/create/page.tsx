@@ -7,36 +7,74 @@ import { getCurrentPosition, isWithinRange } from "@/lib/geo";
 import getFid from "@/app/providers/Fid";
 import { Fid, Restaurant } from "@/app/interface";
 import { useFarcaster } from "@/app/providers/FarcasterProvider";
-import { zeroAddress, type Hex } from "viem";
 import {
-  useFarcasterTransaction,
-  encodeApprove,
-  encodeCreateDish,
-  encodeMint,
-  checkAllowance,
-} from "@/lib/useFarcasterTransaction";
+  zeroAddress,
+  type Hash,
+  type Address,
+  encodeFunctionData,
+  parseAbi,
+  createPublicClient,
+  http,
+} from "viem";
+import { baseSepolia } from "viem/chains";
+import { useAccount, useSendCalls, useCallsStatus } from "wagmi";
 import {
   TMAP_DISHES_ADDRESS,
   USDC_ADDRESS,
   INITIAL_MINT_AMOUNT,
 } from "@/lib/contracts";
 
+// ABIs
+const erc20Abi = parseAbi([
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function balanceOf(address account) view returns (uint256)",
+]);
+
+const tmapDishesAbi = parseAbi([
+  "function createDish(bytes32 dishId, string metadata)",
+  "function mint(bytes32 dishId, uint256 usdcAmount, address referrer)",
+]);
+
+// Public client for reading
+const publicClient = createPublicClient({
+  chain: baseSepolia,
+  transport: http(),
+});
+
 type CreateStep =
   | "idle"
   | "checking"
-  | "approving"
-  | "waitingApproval"
-  | "creating"
-  | "waitingCreate"
-  | "minting"
-  | "waitingMint"
+  | "sending"
+  | "waiting"
   | "saving"
   | "complete";
 
 export default function CreatePage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
-  const { user } = useFarcaster();
+  useFarcaster(); // Initialize Farcaster context
+
+  // Wagmi hooks
+  const { address, isConnected } = useAccount();
+  const {
+    sendCalls,
+    data: callsId,
+    isPending: isSendingCalls,
+    error: sendCallsError,
+  } = useSendCalls();
+
+  // Check calls status
+  const { data: callsStatus, isLoading: isCheckingStatus } = useCallsStatus({
+    id: callsId?.id ?? "",
+    query: {
+      enabled: !!callsId?.id,
+      refetchInterval: (data) => {
+        if (data.state.data?.status === "success") return false;
+        return 2000; // Poll every 2 seconds
+      },
+    },
+  });
 
   // Step 1: Restaurant search
   const [searchQuery, setSearchQuery] = useState("");
@@ -60,13 +98,7 @@ export default function CreatePage() {
   // Step 4: Creating
   const [createStep, setCreateStep] = useState<CreateStep>("idle");
   const [createError, setCreateError] = useState("");
-  const [dishId, setDishId] = useState<Hex | null>(null);
-  const [isNewDish, setIsNewDish] = useState(true);
-  const [txHashes, setTxHashes] = useState<{
-    approve?: Hex;
-    create?: Hex;
-    mint?: Hex;
-  }>({});
+  const [dishId, setDishId] = useState<Hash | null>(null);
 
   // Get user's current location for biased search
   const [userLocation, setUserLocation] = useState<{
@@ -76,10 +108,6 @@ export default function CreatePage() {
 
   // User's Farcaster FID
   const [userFid, setUserFid] = useState<Fid | undefined>(undefined);
-
-  // Use Farcaster transaction hook
-  const { sendTransaction, waitForTransaction, isLoading } =
-    useFarcasterTransaction();
 
   useEffect(() => {
     // Get user's Farcaster FID on mount
@@ -100,6 +128,16 @@ export default function CreatePage() {
       });
   }, []);
 
+  // Watch for calls completion
+  useEffect(() => {
+    if (callsStatus?.status === "success" && createStep === "waiting") {
+      console.log("Calls confirmed!", callsStatus);
+      setCreateStep("saving");
+      saveToDatabase();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [callsStatus?.status, createStep]);
+
   // Check if dish exists in database
   const checkDishExists = async (
     restaurantName: string,
@@ -117,6 +155,43 @@ export default function CreatePage() {
       exists: data.exists || false,
       dishId: data.dishId,
     };
+  };
+
+  // Check USDC allowance
+  const checkAllowance = async (
+    owner: Address,
+    spender: Address
+  ): Promise<bigint> => {
+    try {
+      if (!USDC_ADDRESS) return BigInt(0);
+      const allowance = await publicClient.readContract({
+        address: USDC_ADDRESS,
+        abi: erc20Abi,
+        functionName: "allowance",
+        args: [owner, spender],
+      });
+      return allowance;
+    } catch (err) {
+      console.error("Failed to check allowance:", err);
+      return BigInt(0);
+    }
+  };
+
+  // Check USDC balance
+  const checkBalance = async (owner: Address): Promise<bigint> => {
+    try {
+      if (!USDC_ADDRESS) return BigInt(0);
+      const balance = await publicClient.readContract({
+        address: USDC_ADDRESS,
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [owner],
+      });
+      return balance;
+    } catch (err) {
+      console.error("Failed to check balance:", err);
+      return BigInt(0);
+    }
   };
 
   // Save to database
@@ -139,8 +214,6 @@ export default function CreatePage() {
           restaurantLatitude: selectedRestaurant.latitude,
           restaurantLongitude: selectedRestaurant.longitude,
           creatorFid: userFid,
-          createTxHash: txHashes.create,
-          mintTxHash: txHashes.mint,
         }),
       });
 
@@ -151,7 +224,6 @@ export default function CreatePage() {
       }
 
       setCreateStep("complete");
-      // Success - navigate to dish page
       router.push(`/dish/${dishId}`);
     } catch (err) {
       console.error("Failed to save dish:", err);
@@ -162,7 +234,7 @@ export default function CreatePage() {
     }
   };
 
-  // Main create/mint dish handler
+  // Main create/mint dish handler using useSendCalls
   const handleCreateDish = async () => {
     if (!selectedRestaurant || !dishName.trim()) return;
 
@@ -171,7 +243,7 @@ export default function CreatePage() {
       return;
     }
 
-    if (!user?.walletAddress) {
+    if (!isConnected || !address) {
       setCreateError("Please connect your wallet first.");
       return;
     }
@@ -182,7 +254,6 @@ export default function CreatePage() {
     }
 
     setCreateError("");
-    setTxHashes({});
     setCreateStep("checking");
 
     try {
@@ -193,57 +264,49 @@ export default function CreatePage() {
         dishName
       );
 
-      const targetDishId = existingDishId as Hex;
+      const targetDishId = existingDishId as Hash;
       setDishId(targetDishId);
-      setIsNewDish(!exists);
       console.log("Dish exists:", exists, "DishId:", targetDishId);
 
-      // Step 2: Check if we need to approve USDC
-      const currentAllowance = await checkAllowance(
-        USDC_ADDRESS,
-        user.walletAddress as Hex,
-        TMAP_DISHES_ADDRESS
-      );
-      const needsApproval = currentAllowance < INITIAL_MINT_AMOUNT;
-      console.log(
-        "Current allowance:",
-        currentAllowance.toString(),
-        "Needs approval:",
-        needsApproval
-      );
+      // Step 2: Check USDC balance
+      const balance = await checkBalance(address);
+      console.log("USDC balance:", balance.toString());
 
-      // Step 3: Approve USDC if needed
-      if (needsApproval) {
-        setCreateStep("approving");
-        console.log("Requesting USDC approval...");
-
-        const approveData = encodeApprove(
-          TMAP_DISHES_ADDRESS,
-          INITIAL_MINT_AMOUNT * BigInt(100) // Approve extra for future mints
+      if (balance < INITIAL_MINT_AMOUNT) {
+        throw new Error(
+          `Insufficient USDC balance. You have ${
+            Number(balance) / 1e6
+          } USDC, need ${Number(INITIAL_MINT_AMOUNT) / 1e6} USDC`
         );
-
-        const approveTxHash = await sendTransaction({
-          to: USDC_ADDRESS,
-          data: approveData,
-        });
-
-        setTxHashes((prev) => ({ ...prev, approve: approveTxHash }));
-        console.log("Approval tx hash:", approveTxHash);
-
-        setCreateStep("waitingApproval");
-        const approveSuccess = await waitForTransaction(approveTxHash);
-
-        if (!approveSuccess) {
-          throw new Error("Approval transaction failed");
-        }
-        console.log("Approval confirmed!");
       }
 
-      // Step 4: Create dish if new
-      if (!exists) {
-        setCreateStep("creating");
-        console.log("Creating dish on chain...", targetDishId);
+      // Step 3: Check allowance
+      const currentAllowance = await checkAllowance(
+        address,
+        TMAP_DISHES_ADDRESS
+      );
+      console.log("Current allowance:", currentAllowance.toString());
+      const needsApproval = currentAllowance < INITIAL_MINT_AMOUNT;
 
+      // Build the calls array
+      const calls: { to: Address; data: Hash }[] = [];
+
+      // Add approve call if needed
+      if (needsApproval) {
+        console.log("Adding approve call...");
+        calls.push({
+          to: USDC_ADDRESS,
+          data: encodeFunctionData({
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [TMAP_DISHES_ADDRESS, INITIAL_MINT_AMOUNT * BigInt(1000)], // Approve extra
+          }),
+        });
+      }
+
+      // Add createDish call if new dish
+      if (!exists) {
+        console.log("Adding createDish call...");
         const metadata = JSON.stringify({
           name: dishName.trim(),
           description: dishDescription.trim() || "",
@@ -252,54 +315,36 @@ export default function CreatePage() {
           creator: userFid,
         });
 
-        const createData = encodeCreateDish(targetDishId, metadata);
-
-        const createTxHash = await sendTransaction({
+        calls.push({
           to: TMAP_DISHES_ADDRESS,
-          data: createData,
+          data: encodeFunctionData({
+            abi: tmapDishesAbi,
+            functionName: "createDish",
+            args: [targetDishId, metadata],
+          }),
         });
-
-        setTxHashes((prev) => ({ ...prev, create: createTxHash }));
-        console.log("Create dish tx hash:", createTxHash);
-
-        setCreateStep("waitingCreate");
-        const createSuccess = await waitForTransaction(createTxHash);
-
-        if (!createSuccess) {
-          throw new Error("Create dish transaction failed");
-        }
-        console.log("Dish created!");
       }
 
-      // Step 5: Mint tokens
-      setCreateStep("minting");
-      console.log("Minting tokens...", targetDishId);
-
-      const mintData = encodeMint(
-        targetDishId,
-        INITIAL_MINT_AMOUNT,
-        zeroAddress
-      );
-
-      const mintTxHash = await sendTransaction({
+      // Add mint call
+      console.log("Adding mint call...");
+      calls.push({
         to: TMAP_DISHES_ADDRESS,
-        data: mintData,
+        data: encodeFunctionData({
+          abi: tmapDishesAbi,
+          functionName: "mint",
+          args: [targetDishId, INITIAL_MINT_AMOUNT, zeroAddress],
+        }),
       });
 
-      setTxHashes((prev) => ({ ...prev, mint: mintTxHash }));
-      console.log("Mint tx hash:", mintTxHash);
+      console.log("Sending", calls.length, "calls...");
+      setCreateStep("sending");
 
-      setCreateStep("waitingMint");
-      const mintSuccess = await waitForTransaction(mintTxHash);
+      // Send all calls at once
+      sendCalls({
+        calls,
+      });
 
-      if (!mintSuccess) {
-        throw new Error("Mint transaction failed");
-      }
-      console.log("Tokens minted!");
-
-      // Step 6: Save to database
-      setCreateStep("saving");
-      await saveToDatabase();
+      setCreateStep("waiting");
     } catch (err) {
       console.error("Error in handleCreateDish:", err);
       setCreateError(
@@ -350,7 +395,7 @@ export default function CreatePage() {
         position.coords.longitude,
         selectedRestaurant.latitude,
         selectedRestaurant.longitude,
-        200 // 200 meters
+        200
       );
 
       setVerificationResult({
@@ -359,7 +404,6 @@ export default function CreatePage() {
       });
 
       if (result.isValid) {
-        // Auto advance after short delay
         setTimeout(() => setStep(3), 1500);
       }
     } catch (err) {
@@ -372,23 +416,15 @@ export default function CreatePage() {
     }
   };
 
-  // Get button text based on current step
+  // Get button text
   const getButtonText = () => {
     switch (createStep) {
       case "checking":
         return "Checking...";
-      case "approving":
-        return "Approve in Wallet...";
-      case "waitingApproval":
-        return "Confirming Approval...";
-      case "creating":
+      case "sending":
         return "Confirm in Wallet...";
-      case "waitingCreate":
-        return "Creating Dish...";
-      case "minting":
-        return "Confirm in Wallet...";
-      case "waitingMint":
-        return "Minting Tokens...";
+      case "waiting":
+        return "Waiting for confirmation...";
       case "saving":
         return "Saving...";
       case "complete":
@@ -402,21 +438,11 @@ export default function CreatePage() {
   const getProgressMessage = () => {
     switch (createStep) {
       case "checking":
-        return "Checking if dish exists...";
-      case "approving":
-        return "Please approve USDC spending in your wallet...";
-      case "waitingApproval":
-        return "Waiting for approval confirmation...";
-      case "creating":
-        return "Please confirm dish creation in your wallet...";
-      case "waitingCreate":
-        return "Waiting for dish creation confirmation...";
-      case "minting":
-        return "Please confirm minting in your wallet...";
-      case "waitingMint":
-        return isNewDish
-          ? "Waiting for mint confirmation..."
-          : "Minting tokens to existing dish...";
+        return "Checking dish and wallet...";
+      case "sending":
+        return "Please confirm the transaction in your wallet";
+      case "waiting":
+        return "Transaction submitted, waiting for confirmation...";
       case "saving":
         return "Saving to database...";
       default:
@@ -425,14 +451,7 @@ export default function CreatePage() {
   };
 
   const isCreating = createStep !== "idle" && createStep !== "complete";
-  const isWaitingForWallet =
-    createStep === "approving" ||
-    createStep === "creating" ||
-    createStep === "minting";
-  const isWaitingForConfirmation =
-    createStep === "waitingApproval" ||
-    createStep === "waitingCreate" ||
-    createStep === "waitingMint";
+  const displayError = createError || sendCallsError?.message;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -466,7 +485,6 @@ export default function CreatePage() {
       {/* Progress Steps */}
       <div className="bg-white px-4 py-4 border-b border-gray-100">
         <div className="flex items-center justify-between relative">
-          {/* Connecting lines */}
           <div className="absolute top-4 left-4 right-4 h-1 flex">
             {[1, 2, 3].map((s) => (
               <div
@@ -477,7 +495,6 @@ export default function CreatePage() {
               />
             ))}
           </div>
-          {/* Bubbles */}
           {[1, 2, 3, 4].map((s) => (
             <div
               key={s}
@@ -565,7 +582,6 @@ export default function CreatePage() {
               </div>
             </div>
 
-            {/* Search Results */}
             {searchResults.length > 0 && (
               <div className="space-y-2">
                 <p className="text-sm text-gray-500">
@@ -595,7 +611,6 @@ export default function CreatePage() {
               </div>
             )}
 
-            {/* Selected Restaurant */}
             {selectedRestaurant && (
               <div className="bg-primary-softer border border-primary rounded-xl p-4">
                 <p className="text-sm text-primary font-medium">Selected:</p>
@@ -684,7 +699,7 @@ export default function CreatePage() {
                   You{"'"}re too far away
                 </p>
                 <p className="text-sm text-red-600 mt-1">
-                  You{"'"}re {verificationResult.distance}m away. You need to be
+                  You{"'"}re {verificationResult.distance}m away. Need to be
                   within 200m.
                 </p>
               </div>
@@ -859,13 +874,11 @@ export default function CreatePage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Mint Amount</span>
-                  <span className="font-medium text-gray-900">$1.00 USDC</span>
+                  <span className="font-medium text-gray-900">$0.10 USDC</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Creator Fee</span>
-                  <span className="font-medium text-gray-900">
-                    2.5% of all trades
-                  </span>
+                  <span className="font-medium text-gray-900">2.5%</span>
                 </div>
               </div>
             </div>
@@ -886,7 +899,7 @@ export default function CreatePage() {
                     You{"'"}ll be the creator!
                   </p>
                   <p className="text-sm text-gray-600 mt-1">
-                    Earn 2.5% on all future trades of this token.
+                    Earn 2.5% on all future trades.
                   </p>
                 </div>
               </div>
@@ -894,57 +907,30 @@ export default function CreatePage() {
 
             {/* Transaction Progress */}
             {isCreating && (
-              <div
-                className={`border rounded-xl p-4 ${
-                  isWaitingForWallet
-                    ? "bg-yellow-50 border-yellow-200"
-                    : "bg-blue-50 border-blue-200"
-                }`}
-              >
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                 <div className="flex items-center gap-3">
-                  <div
-                    className={`w-5 h-5 border-2 rounded-full animate-spin ${
-                      isWaitingForWallet
-                        ? "border-yellow-500/30 border-t-yellow-500"
-                        : "border-blue-500/30 border-t-blue-500"
-                    }`}
-                  />
+                  <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
                   <div>
-                    <p
-                      className={`font-medium ${
-                        isWaitingForWallet ? "text-yellow-800" : "text-blue-800"
-                      }`}
-                    >
+                    <p className="font-medium text-blue-800">
                       {getProgressMessage()}
                     </p>
-                    {isWaitingForWallet && (
-                      <p className="text-sm text-yellow-600 mt-1">
-                        Check your wallet for the transaction request
-                      </p>
-                    )}
-                    {isWaitingForConfirmation && (
-                      <p className="text-sm text-blue-600 mt-1">
-                        Transaction submitted, waiting for blockchain
-                        confirmation...
-                      </p>
-                    )}
                   </div>
                 </div>
               </div>
             )}
 
-            {createError && (
+            {displayError && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
-                <p className="text-red-700 text-sm">{createError}</p>
+                <p className="text-red-700 text-sm">{displayError}</p>
               </div>
             )}
 
             <button
               onClick={handleCreateDish}
-              disabled={isCreating || isLoading}
+              disabled={isCreating || isSendingCalls || isCheckingStatus}
               className="w-full btn-primary disabled:opacity-60 font-semibold py-4 rounded-xl flex items-center justify-center gap-2"
             >
-              {isCreating ? (
+              {isCreating || isSendingCalls ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   {getButtonText()}
