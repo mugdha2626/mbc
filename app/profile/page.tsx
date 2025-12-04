@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { BottomNav } from "@/app/components/layout/BottomNav";
 import { GoogleMapView } from "@/app/components/map/GoogleMapView";
 import { getCurrentPosition } from "@/lib/geo";
@@ -51,6 +52,7 @@ export default function ProfilePage() {
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [showCityPicker, setShowCityPicker] = useState(false);
   const [currentLocationCity, setCurrentLocationCity] = useState<string>("Loading...");
+  const [wishlistCount, setWishlistCount] = useState<number>(0);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -85,6 +87,13 @@ export default function ProfilePage() {
           const restaurantsData = await restaurantsRes.json();
           setBackedRestaurants(restaurantsData.restaurants || []);
           setAvailableCities(restaurantsData.cities || []);
+        }
+
+        // Fetch wishlist count
+        const wishlistRes = await fetch(`/api/wishlist?fid=${fid}`);
+        if (wishlistRes.ok) {
+          const wishlistData = await wishlistRes.json();
+          setWishlistCount(wishlistData.wishlist?.length || 0);
         }
       } catch (err) {
         console.error("Failed to load user:", err);
@@ -281,6 +290,42 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      {/* Wishlist Button */}
+      <div className="px-4 py-4">
+        <Link
+          href="/wishlist"
+          className="group flex items-center justify-between bg-white p-4 rounded-2xl border border-gray-100 hover:border-primary-soft hover:shadow-md transition-all"
+        >
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center text-red-400 group-hover:from-red-100 group-hover:to-red-200 group-hover:text-red-500 transition-all">
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </div>
+              {wishlistCount > 0 && (
+                <div className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1.5 shadow-sm">
+                  {wishlistCount > 99 ? '99+' : wishlistCount}
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900 group-hover:text-primary-dark transition-colors">My Wishlist</p>
+              <p className="text-sm text-gray-500">
+                {wishlistCount === 0
+                  ? "Save dishes you want to try"
+                  : `${wishlistCount} saved ${wishlistCount === 1 ? 'dish' : 'dishes'}`}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-gray-300 group-hover:text-primary-dark group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </Link>
+      </div>
+
       {/* Taste Map Section */}
       <div className="px-4 py-6">
         <div className="flex items-center justify-between mb-4">
@@ -294,7 +339,7 @@ export default function ProfilePage() {
             {filteredRestaurants.length} {filteredRestaurants.length === 1 ? "Spot" : "Spots"}
           </span>
         </div>
-        
+
         {/* Map Container */}
         <div className="relative h-52 rounded-2xl overflow-hidden shadow-sm">
           <GoogleMapView
@@ -305,7 +350,7 @@ export default function ProfilePage() {
             restaurants={filteredRestaurants}
             defaultZoom={13}
           />
-          
+
           {/* Location label with city picker */}
           <div className="absolute bottom-3 right-3 z-10">
             <button
@@ -335,7 +380,7 @@ export default function ProfilePage() {
                   className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${!selectedCity ? 'text-primary-dark font-medium' : 'text-gray-700'}`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
                   </svg>
                   Current Location
                   {!selectedCity && (
