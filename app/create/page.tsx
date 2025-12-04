@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { BottomNav } from "@/app/components/layout/BottomNav";
 import { getCurrentPosition, isWithinRange } from "@/lib/geo";
@@ -45,34 +45,57 @@ const publicClient = createPublicClient({
 type CreateStep =
   | "idle"
   | "checking"
-  | "sending"
-  | "waiting"
+  | "sendingSetup" // Sending approve + createDish
+  | "waitingSetup" // Waiting for approve + createDish
+  | "sendingMint" // Sending mint
+  | "waitingMint" // Waiting for mint
   | "saving"
   | "complete";
 
 export default function CreatePage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
-  useFarcaster(); // Initialize Farcaster context
+  useFarcaster();
 
   // Wagmi hooks
   const { address, isConnected } = useAccount();
+
+  // First call: Setup (approve + createDish)
   const {
-    sendCalls,
-    data: callsId,
-    isPending: isSendingCalls,
-    error: sendCallsError,
-    reset: resetSendCalls,
+    sendCalls: sendSetupCalls,
+    data: setupCallsId,
+    isPending: isSetupPending,
+    error: setupError,
+    reset: resetSetup,
   } = useSendCalls();
 
-  // Check calls status
-  const { data: callsStatus, isLoading: isCheckingStatus } = useCallsStatus({
-    id: callsId?.id ?? "",
+  const { data: setupStatus } = useCallsStatus({
+    id: setupCallsId?.id ?? "",
     query: {
-      enabled: !!callsId?.id,
+      enabled: !!setupCallsId?.id,
       refetchInterval: (data) => {
         if (data.state.data?.status === "success") return false;
-        return 2000; // Poll every 2 seconds
+        return 2000;
+      },
+    },
+  });
+
+  // Second call: Mint
+  const {
+    sendCalls: sendMintCalls,
+    data: mintCallsId,
+    isPending: isMintPending,
+    error: mintError,
+    reset: resetMint,
+  } = useSendCalls();
+
+  const { data: mintStatus } = useCallsStatus({
+    id: mintCallsId?.id ?? "",
+    query: {
+      enabled: !!mintCallsId?.id,
+      refetchInterval: (data) => {
+        if (data.state.data?.status === "success") return false;
+        return 2000;
       },
     },
   });
@@ -102,6 +125,9 @@ export default function CreatePage() {
   const [dishId, setDishId] = useState<Hash | null>(null);
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
 
+  // Track mint triggered state with ref to avoid race conditions
+  const mintTriggeredRef = useRef(false);
+
   // Get user's current location for biased search
   const [userLocation, setUserLocation] = useState<{
     lat: number;
@@ -112,12 +138,7 @@ export default function CreatePage() {
   const [userFid, setUserFid] = useState<Fid | undefined>(undefined);
 
   useEffect(() => {
-    // Get user's Farcaster FID on mount
-    getFid().then((fid) => {
-      setUserFid(fid);
-    });
-
-    // Get user location on mount for better search results
+    getFid().then((fid) => setUserFid(fid));
     getCurrentPosition()
       .then((pos) => {
         setUserLocation({
@@ -125,113 +146,151 @@ export default function CreatePage() {
           lng: pos.coords.longitude,
         });
       })
-      .catch(() => {
-        // Ignore - location is optional for search
-      });
+      .catch(() => {});
   }, []);
 
-  // Watch for sendCalls to complete (when we get callsId)
-  useEffect(() => {
-    if (callsId?.id && createStep === "sending") {
-      console.log("Calls submitted, ID:", callsId.id);
-      setCreateStep("waiting");
+  // Helper to add debug info
+  const addDebug = (msg: string) => {
+    setDebugInfo((prev) => [...prev, msg]);
+    console.log("[Debug]", msg);
+  };
+
+  // Check if status indicates success
+  const isStatusSuccess = (
+    status:
+      | { status?: string; receipts?: Array<{ status?: string | number }> }
+      | undefined
+  ) => {
+    if (!status) return false;
+    if (status.status === "success") return true;
+
+    // Check receipts
+    const receipts = status.receipts;
+    if (receipts && receipts.length > 0) {
+      return receipts.every((r) => {
+        const s = r.status;
+        return s === "success" || s === "0x1" || s === 1 || s === "1";
+      });
     }
-  }, [callsId?.id, createStep]);
+    return false;
+  };
 
-  // Watch for sendCalls error
+  // Watch for setup calls to be submitted
   useEffect(() => {
-    if (sendCallsError && createStep === "sending") {
-      console.error("sendCalls error:", sendCallsError);
-      setCreateError(sendCallsError.message || "Transaction failed");
-      setCreateStep("idle");
+    if (setupCallsId?.id && createStep === "sendingSetup") {
+      addDebug(`Setup calls submitted: ${setupCallsId.id.slice(0, 10)}...`);
+      setCreateStep("waitingSetup");
     }
-  }, [sendCallsError, createStep]);
+  }, [setupCallsId?.id, createStep]);
 
-  // Watch for calls completion or failure
+  // Watch for setup completion -> trigger mint
   useEffect(() => {
-    if (createStep === "waiting" && callsStatus) {
-      console.log("Calls status update:", callsStatus);
+    if (
+      createStep === "waitingSetup" &&
+      setupStatus &&
+      !mintTriggeredRef.current
+    ) {
+      console.log("Setup status:", setupStatus);
 
-      const status = callsStatus.status;
-
-      if (status === "success") {
-        console.log("Calls confirmed!", callsStatus);
-        setCreateStep("saving");
-        saveToDatabase();
-      } else if (status === "pending") {
-        // Still waiting, do nothing
-        console.log("Still pending...");
-      } else if (status === "failure") {
-        // Status says failure - but let's check if receipts say success
-        const receipts = callsStatus.receipts as
-          | Array<{
-              status?: string | number;
-              transactionHash?: string;
-            }>
+      if (isStatusSuccess(setupStatus)) {
+        addDebug("Setup complete! Starting mint...");
+        mintTriggeredRef.current = true;
+        triggerMint();
+      } else if (setupStatus.status === "failure") {
+        const receipts = setupStatus.receipts as
+          | Array<{ transactionHash?: string }>
           | undefined;
-
-        if (receipts && receipts.length > 0) {
-          // Check if all receipts actually succeeded
-          // Receipt status can be: "success", "0x1", 1, "1"
-          const allSuccess = receipts.every((r) => {
-            const s = r.status;
-            return s === "success" || s === "0x1" || s === 1 || s === "1";
-          });
-
-          // Get transaction hashes for debugging/proceeding
-          const txHashes = receipts
-            .filter((r) => r.transactionHash)
-            .map((r) => r.transactionHash);
-
-          if (allSuccess) {
-            console.log("Receipts show success - proceeding!");
-            setCreateStep("saving");
-            saveToDatabase();
-            return;
-          }
-
-          // If we have tx hashes but status is unclear, show info and let user decide
-          if (txHashes.length > 0) {
-            const receiptStatuses = receipts
-              .map((r) => String(r.status))
-              .join(", ");
-            setCreateError(
-              `Status unclear (${receiptStatuses}). Verify on BaseScan: ${txHashes.join(
-                ", "
-              )} - If success, refresh the page.`
-            );
-          } else {
-            setCreateError(
-              `Transaction failed. No transaction hash available.`
-            );
-          }
-        } else {
-          setCreateError(`Transaction failed. No receipt details.`);
-        }
-
+        const txHash = receipts?.[0]?.transactionHash || "unknown";
+        setCreateError(`Setup failed. Tx: ${txHash}`);
         setCreateStep("idle");
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [callsStatus, createStep]);
+  }, [setupStatus, createStep]);
+
+  // Watch for mint calls to be submitted
+  useEffect(() => {
+    if (mintCallsId?.id && createStep === "sendingMint") {
+      addDebug(`Mint call submitted: ${mintCallsId.id.slice(0, 10)}...`);
+      setCreateStep("waitingMint");
+    }
+  }, [mintCallsId?.id, createStep]);
+
+  // Watch for mint completion -> save to database
+  useEffect(() => {
+    if (createStep === "waitingMint" && mintStatus) {
+      console.log("Mint status:", mintStatus);
+
+      if (isStatusSuccess(mintStatus)) {
+        addDebug("Mint complete! Saving to database...");
+        setCreateStep("saving");
+        saveToDatabase();
+      } else if (mintStatus.status === "failure") {
+        const receipts = mintStatus.receipts as
+          | Array<{ transactionHash?: string }>
+          | undefined;
+        const txHash = receipts?.[0]?.transactionHash || "unknown";
+        setCreateError(`Mint failed. Tx: ${txHash}`);
+        setCreateStep("idle");
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mintStatus, createStep]);
+
+  // Watch for errors
+  useEffect(() => {
+    if (
+      setupError &&
+      (createStep === "sendingSetup" || createStep === "waitingSetup")
+    ) {
+      setCreateError(setupError.message || "Setup transaction failed");
+      setCreateStep("idle");
+    }
+  }, [setupError, createStep]);
+
+  useEffect(() => {
+    if (
+      mintError &&
+      (createStep === "sendingMint" || createStep === "waitingMint")
+    ) {
+      setCreateError(mintError.message || "Mint transaction failed");
+      setCreateStep("idle");
+    }
+  }, [mintError, createStep]);
+
+  // Trigger the mint call
+  const triggerMint = () => {
+    if (!dishId || !TMAP_DISHES_ADDRESS) return;
+
+    setCreateStep("sendingMint");
+    addDebug("Sending mint transaction...");
+
+    sendMintCalls({
+      calls: [
+        {
+          to: TMAP_DISHES_ADDRESS,
+          data: encodeFunctionData({
+            abi: tmapDishesAbi,
+            functionName: "mint",
+            args: [dishId, INITIAL_MINT_AMOUNT, zeroAddress],
+          }),
+        },
+      ],
+    });
+  };
 
   // Check if dish exists in database
   const checkDishExists = async (
     restaurantName: string,
-    dishName: string
-  ): Promise<{ exists: boolean; dishId: string }> => {
+    dishNameParam: string
+  ) => {
     const params = new URLSearchParams({
       restaurantName,
-      dishName,
+      dishName: dishNameParam,
     });
-
     const res = await fetch(`/api/dish/create?${params}`);
     const data = await res.json();
-
-    return {
-      exists: data.exists || false,
-      dishId: data.dishId,
-    };
+    return { exists: data.exists || false, dishId: data.dishId };
   };
 
   // Check USDC allowance
@@ -241,15 +300,13 @@ export default function CreatePage() {
   ): Promise<bigint> => {
     try {
       if (!USDC_ADDRESS) return BigInt(0);
-      const allowance = await publicClient.readContract({
+      return await publicClient.readContract({
         address: USDC_ADDRESS,
         abi: erc20Abi,
         functionName: "allowance",
         args: [owner, spender],
       });
-      return allowance;
-    } catch (err) {
-      console.error("Failed to check allowance:", err);
+    } catch {
       return BigInt(0);
     }
   };
@@ -258,15 +315,13 @@ export default function CreatePage() {
   const checkBalance = async (owner: Address): Promise<bigint> => {
     try {
       if (!USDC_ADDRESS) return BigInt(0);
-      const balance = await publicClient.readContract({
+      return await publicClient.readContract({
         address: USDC_ADDRESS,
         abi: erc20Abi,
         functionName: "balanceOf",
         args: [owner],
       });
-      return balance;
-    } catch (err) {
-      console.error("Failed to check balance:", err);
+    } catch {
       return BigInt(0);
     }
   };
@@ -278,11 +333,9 @@ export default function CreatePage() {
     try {
       const res = await fetch("/api/dish/create", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          dishId: dishId,
+          dishId,
           name: dishName.trim(),
           description: dishDescription.trim() || undefined,
           restaurantId: selectedRestaurant.id,
@@ -295,13 +348,11 @@ export default function CreatePage() {
       });
 
       const data = await res.json();
-
       if (!res.ok) {
-        console.error("Save dish API error:", data);
         throw new Error(data.error || `Failed to save dish (${res.status})`);
       }
 
-      console.log("Dish saved successfully:", data);
+      addDebug("Saved to database!");
       setCreateStep("complete");
       router.push(`/dish/${dishId}`);
     } catch (err) {
@@ -313,73 +364,55 @@ export default function CreatePage() {
     }
   };
 
-  // Main create/mint dish handler using useSendCalls
+  // Main create dish handler
   const handleCreateDish = async () => {
     if (!selectedRestaurant || !dishName.trim()) return;
-
     if (!userFid) {
-      setCreateError("Unable to get your Farcaster ID. Please try again.");
+      setCreateError("Unable to get your Farcaster ID.");
       return;
     }
-
     if (!isConnected || !address) {
       setCreateError("Please connect your wallet first.");
       return;
     }
-
     if (!TMAP_DISHES_ADDRESS || !USDC_ADDRESS) {
-      setCreateError(
-        "Contract addresses not configured. Check your .env file."
-      );
-      console.error(
-        "Missing addresses - TMAP:",
-        TMAP_DISHES_ADDRESS,
-        "USDC:",
-        USDC_ADDRESS
-      );
+      setCreateError("Contract addresses not configured.");
       return;
     }
 
+    // Reset state
     setCreateError("");
     setDebugInfo([]);
-    resetSendCalls(); // Clear any previous transaction state
+    resetSetup();
+    resetMint();
+    mintTriggeredRef.current = false;
     setCreateStep("checking");
 
-    const addDebug = (msg: string) => {
-      setDebugInfo((prev) => [...prev, msg]);
-    };
-
-    addDebug(`TMAP: ${TMAP_DISHES_ADDRESS?.slice(0, 10)}...`);
-    addDebug(`USDC: ${USDC_ADDRESS?.slice(0, 10)}...`);
-    addDebug(`Wallet: ${address?.slice(0, 10)}...`);
+    addDebug(`TMAP: ${TMAP_DISHES_ADDRESS.slice(0, 10)}...`);
+    addDebug(`USDC: ${USDC_ADDRESS.slice(0, 10)}...`);
+    addDebug(`Wallet: ${address.slice(0, 10)}...`);
 
     try {
-      // Step 1: Check if dish already exists
-      console.log("Checking if dish exists...");
-      const { exists, dishId: existingDishId } = await checkDishExists(
+      // Check if dish exists
+      const { exists, dishId: fetchedDishId } = await checkDishExists(
         selectedRestaurant.name,
         dishName
       );
-
-      const targetDishId = existingDishId as Hash;
+      const targetDishId = fetchedDishId as Hash;
       setDishId(targetDishId);
       addDebug(`DishId: ${targetDishId.slice(0, 10)}...`);
       addDebug(`DB exists: ${exists}`);
 
-      // Step 2: Check USDC balance
+      // Check balance
       const balance = await checkBalance(address);
-      const balanceUSDC = Number(balance) / 1e6;
-      addDebug(`USDC Balance: ${balanceUSDC}`);
-
+      addDebug(`Balance: ${Number(balance) / 1e6} USDC`);
       if (balance < INITIAL_MINT_AMOUNT) {
         throw new Error(
-          `Insufficient USDC balance. You have ${balanceUSDC} USDC, need ${
-            Number(INITIAL_MINT_AMOUNT) / 1e6
-          } USDC. Get test USDC from Circle's faucet.`
+          `Insufficient USDC. Need ${Number(INITIAL_MINT_AMOUNT) / 1e6} USDC.`
         );
       }
 
-      // Step 2b: Check if dish already exists on-chain (prevents DishAlreadyExists error)
+      // Check if dish exists on-chain
       let dishExistsOnChain = false;
       try {
         const onChainDish = await publicClient.readContract({
@@ -402,32 +435,22 @@ export default function CreatePage() {
           functionName: "dishes",
           args: [targetDishId],
         });
-        dishExistsOnChain = onChainDish[4]; // exists field
-        addDebug(`On-chain exists: ${dishExistsOnChain}`);
+        dishExistsOnChain = onChainDish[4];
+        addDebug(`On-chain: ${dishExistsOnChain}`);
       } catch {
-        addDebug(`Contract read FAILED`);
-        throw new Error(
-          "Cannot read from TmapDishes contract. Is it deployed on Base Sepolia?"
-        );
+        throw new Error("Cannot read TmapDishes contract. Is it deployed?");
       }
 
-      // Step 3: Check allowance
-      const currentAllowance = await checkAllowance(
-        address,
-        TMAP_DISHES_ADDRESS
-      );
-      const allowanceUSDC = Number(currentAllowance) / 1e6;
-      addDebug(`Allowance: ${allowanceUSDC} USDC`);
-      const needsApproval = currentAllowance < INITIAL_MINT_AMOUNT;
-      addDebug(`Needs approval: ${needsApproval}`);
+      // Check allowance
+      const allowance = await checkAllowance(address, TMAP_DISHES_ADDRESS);
+      addDebug(`Allowance: ${Number(allowance) / 1e6} USDC`);
+      const needsApprove = allowance < INITIAL_MINT_AMOUNT;
 
-      // Build the calls array
-      const calls: { to: Address; data: `0x${string}` }[] = [];
-      const callNames: string[] = [];
+      // Build setup calls (approve + createDish if needed)
+      const setupCalls: { to: Address; data: `0x${string}` }[] = [];
 
-      // Add approve call if needed
-      if (needsApproval) {
-        calls.push({
+      if (needsApprove) {
+        setupCalls.push({
           to: USDC_ADDRESS,
           data: encodeFunctionData({
             abi: erc20Abi,
@@ -435,10 +458,9 @@ export default function CreatePage() {
             args: [TMAP_DISHES_ADDRESS, INITIAL_MINT_AMOUNT * BigInt(1000)],
           }),
         });
-        callNames.push("approve");
+        addDebug("+ approve");
       }
 
-      // Add createDish call if dish doesn't exist on chain
       if (!dishExistsOnChain) {
         const metadata = JSON.stringify({
           name: dishName.trim(),
@@ -447,8 +469,7 @@ export default function CreatePage() {
           restaurantId: selectedRestaurant.id,
           creator: userFid,
         });
-
-        calls.push({
+        setupCalls.push({
           to: TMAP_DISHES_ADDRESS,
           data: encodeFunctionData({
             abi: tmapDishesAbi,
@@ -456,41 +477,36 @@ export default function CreatePage() {
             args: [targetDishId, metadata],
           }),
         });
-        callNames.push("createDish");
+        addDebug("+ createDish");
       }
 
-      // Add mint call
-      calls.push({
-        to: TMAP_DISHES_ADDRESS,
-        data: encodeFunctionData({
-          abi: tmapDishesAbi,
-          functionName: "mint",
-          args: [targetDishId, INITIAL_MINT_AMOUNT, zeroAddress],
-        }),
-      });
-      callNames.push("mint");
+      // If we have setup calls, send them first
+      if (setupCalls.length > 0) {
+        setCreateStep("sendingSetup");
+        addDebug(`Sending ${setupCalls.length} setup call(s)...`);
 
-      addDebug(`Calls: ${callNames.join(" → ")}`);
-      console.log("Sending", calls.length, "calls:");
-      calls.forEach((call, i) => {
-        console.log(
-          `  Call ${i + 1}: to=${call.to}, data=${call.data.slice(0, 66)}...`
-        );
-      });
-      setCreateStep("sending");
+        sendSetupCalls({ calls: setupCalls });
+      } else {
+        // No setup needed, go directly to mint
+        addDebug("No setup needed, going to mint...");
+        setCreateStep("sendingMint");
 
-      // Send all calls at once - the useEffect will handle the transition to "waiting"
-      sendCalls({
-        calls,
-      });
-      // Don't set "waiting" here - wait for callsId in useEffect
+        sendMintCalls({
+          calls: [
+            {
+              to: TMAP_DISHES_ADDRESS,
+              data: encodeFunctionData({
+                abi: tmapDishesAbi,
+                functionName: "mint",
+                args: [targetDishId, INITIAL_MINT_AMOUNT, zeroAddress],
+              }),
+            },
+          ],
+        });
+      }
     } catch (err) {
-      console.error("Error in handleCreateDish:", err);
-      setCreateError(
-        err instanceof Error
-          ? err.message
-          : "Transaction failed. Please try again."
-      );
+      console.error("Error:", err);
+      setCreateError(err instanceof Error ? err.message : "Failed");
       setCreateStep("idle");
     }
   };
@@ -498,7 +514,6 @@ export default function CreatePage() {
   // Search restaurants
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
-
     setIsSearching(true);
     try {
       const params = new URLSearchParams({ q: searchQuery });
@@ -506,13 +521,9 @@ export default function CreatePage() {
         params.set("lat", userLocation.lat.toString());
         params.set("lng", userLocation.lng.toString());
       }
-
       const res = await fetch(`/api/places/search?${params}`);
       const data = await res.json();
-
-      if (data.places) {
-        setSearchResults(data.places);
-      }
+      if (data.places) setSearchResults(data.places);
     } catch (err) {
       console.error("Search failed:", err);
     } finally {
@@ -520,13 +531,11 @@ export default function CreatePage() {
     }
   };
 
-  // Verify user is at selected restaurant
+  // Verify location
   const handleVerifyLocation = async () => {
     if (!selectedRestaurant) return;
-
     setIsVerifying(true);
     setVerificationError("");
-
     try {
       const position = await getCurrentPosition();
       const result = isWithinRange(
@@ -536,34 +545,30 @@ export default function CreatePage() {
         selectedRestaurant.longitude,
         200
       );
-
       setVerificationResult({
         verified: result.isValid,
         distance: result.distance,
       });
-
-      if (result.isValid) {
-        setTimeout(() => setStep(3), 1500);
-      }
-    } catch (err) {
-      console.error("Location error:", err);
-      setVerificationError(
-        "Could not get your location. Please enable location services."
-      );
+      if (result.isValid) setTimeout(() => setStep(3), 1500);
+    } catch {
+      setVerificationError("Could not get your location.");
     } finally {
       setIsVerifying(false);
     }
   };
 
-  // Get button text
   const getButtonText = () => {
     switch (createStep) {
       case "checking":
         return "Checking...";
-      case "sending":
-        return "Confirm in Wallet...";
-      case "waiting":
-        return "Waiting for confirmation...";
+      case "sendingSetup":
+        return "Confirm Setup...";
+      case "waitingSetup":
+        return "Waiting for Setup...";
+      case "sendingMint":
+        return "Confirm Mint...";
+      case "waitingMint":
+        return "Waiting for Mint...";
       case "saving":
         return "Saving...";
       case "complete":
@@ -573,15 +578,18 @@ export default function CreatePage() {
     }
   };
 
-  // Get progress message
   const getProgressMessage = () => {
     switch (createStep) {
       case "checking":
         return "Checking dish and wallet...";
-      case "sending":
-        return "Please confirm the transaction in your wallet";
-      case "waiting":
-        return "Transaction submitted, waiting for confirmation...";
+      case "sendingSetup":
+        return "Please confirm the setup transaction (approve + createDish)";
+      case "waitingSetup":
+        return "Waiting for setup confirmation...";
+      case "sendingMint":
+        return "Please confirm the mint transaction";
+      case "waitingMint":
+        return "Waiting for mint confirmation...";
       case "saving":
         return "Saving to database...";
       default:
@@ -590,7 +598,7 @@ export default function CreatePage() {
   };
 
   const isCreating = createStep !== "idle" && createStep !== "complete";
-  const displayError = createError || sendCallsError?.message;
+  const displayError = createError || setupError?.message || mintError?.message;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -675,7 +683,7 @@ export default function CreatePage() {
 
       {/* Step Content */}
       <div className="p-4">
-        {/* Step 1: Search Restaurant */}
+        {/* Step 1: Search */}
         {step === 1 && (
           <div className="space-y-4">
             <div>
@@ -685,7 +693,6 @@ export default function CreatePage() {
               <p className="text-sm text-gray-500 mb-4">
                 Search for the restaurant where you want to create a dish token.
               </p>
-
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -693,12 +700,12 @@ export default function CreatePage() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                   placeholder="Search restaurants..."
-                  className="flex-1 bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-(--primary-hover)"
+                  className="flex-1 bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <button
                   onClick={handleSearch}
                   disabled={isSearching || !searchQuery.trim()}
-                  className="px-4 btn-primary disabled:bg-gray-200 rounded-xl transition-colors"
+                  className="px-4 btn-primary disabled:bg-gray-200 rounded-xl"
                 >
                   {isSearching ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -720,7 +727,6 @@ export default function CreatePage() {
                 </button>
               </div>
             </div>
-
             {searchResults.length > 0 && (
               <div className="space-y-2">
                 <p className="text-sm text-gray-500">
@@ -733,9 +739,9 @@ export default function CreatePage() {
                       setSelectedRestaurant(restaurant);
                       setStep(3);
                     }}
-                    className={`w-full text-left bg-white border rounded-xl p-4 hover:border-(--primary-hover) transition-colors ${
+                    className={`w-full text-left bg-white border rounded-xl p-4 hover:border-blue-500 transition-colors ${
                       selectedRestaurant?.id === restaurant.id
-                        ? "border-(--primary-dark) ring-2 ring-(--primary)"
+                        ? "border-blue-500 ring-2 ring-blue-200"
                         : "border-gray-200"
                     }`}
                   >
@@ -749,21 +755,6 @@ export default function CreatePage() {
                 ))}
               </div>
             )}
-
-            {selectedRestaurant && (
-              <div className="bg-primary-softer border border-primary rounded-xl p-4">
-                <p className="text-sm text-primary font-medium">Selected:</p>
-                <p className="font-semibold text-gray-900">
-                  {selectedRestaurant.name}
-                </p>
-                <button
-                  onClick={() => setStep(3)}
-                  className="mt-3 w-full btn-primary font-semibold py-3 rounded-xl"
-                >
-                  Continue
-                </button>
-              </div>
-            )}
           </div>
         )}
 
@@ -771,9 +762,9 @@ export default function CreatePage() {
         {step === 2 && selectedRestaurant && (
           <div className="space-y-6">
             <div className="text-center py-6">
-              <div className="w-20 h-20 bg-primary-soft rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg
-                  className="w-10 h-10 text-primary-dark"
+                  className="w-10 h-10 text-blue-600"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -795,13 +786,12 @@ export default function CreatePage() {
               <h2 className="text-xl font-semibold text-gray-900 mb-2">
                 Verify You{"'"}re There
               </h2>
-              <p className="text-gray-500 max-w-xs mx-auto">
+              <p className="text-gray-500">
                 You must be at{" "}
                 <span className="font-medium">{selectedRestaurant.name}</span>{" "}
                 to create a dish token.
               </p>
             </div>
-
             <div className="bg-white border border-gray-200 rounded-xl p-4">
               <p className="font-medium text-gray-900">
                 {selectedRestaurant.name}
@@ -810,93 +800,36 @@ export default function CreatePage() {
                 {selectedRestaurant.address}
               </p>
             </div>
-
             {verificationError && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
                 <p className="text-red-700">{verificationError}</p>
               </div>
             )}
-
             {verificationResult && !verificationResult.verified && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
-                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <svg
-                    className="w-6 h-6 text-red-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </div>
                 <p className="font-medium text-red-800">
                   You{"'"}re too far away
                 </p>
-                <p className="text-sm text-red-600 mt-1">
-                  You{"'"}re {verificationResult.distance}m away. Need to be
-                  within 200m.
+                <p className="text-sm text-red-600">
+                  {verificationResult.distance}m away. Need to be within 200m.
                 </p>
               </div>
             )}
-
-            {verificationResult && verificationResult.verified && (
+            {verificationResult?.verified && (
               <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <svg
-                    className="w-6 h-6 text-green-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                </div>
                 <p className="font-medium text-green-800">Location Verified!</p>
-                <p className="text-sm text-green-600 mt-1">
-                  You{"'"}re {verificationResult.distance}m from the restaurant.
+                <p className="text-sm text-green-600">
+                  {verificationResult.distance}m from restaurant.
                 </p>
               </div>
             )}
-
             {!verificationResult?.verified && (
               <button
                 onClick={handleVerifyLocation}
                 disabled={isVerifying}
                 className="w-full btn-primary disabled:opacity-60 font-semibold py-4 rounded-xl flex items-center justify-center gap-2"
               >
-                {isVerifying ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Checking location...
-                  </>
-                ) : (
-                  <>
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                      />
-                    </svg>
-                    Verify My Location
-                  </>
-                )}
+                {isVerifying ? "Checking..." : "Verify My Location"}
               </button>
             )}
           </div>
@@ -909,14 +842,12 @@ export default function CreatePage() {
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
                 Dish Details
               </h2>
-
               <div className="bg-gray-100 rounded-xl p-3 mb-4">
                 <p className="text-xs text-gray-500">Restaurant</p>
                 <p className="font-medium text-gray-900">
                   {selectedRestaurant.name}
                 </p>
               </div>
-
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -927,10 +858,9 @@ export default function CreatePage() {
                     value={dishName}
                     onChange={(e) => setDishName(e.target.value)}
                     placeholder="e.g., Truffle Mushroom Risotto"
-                    className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-(--primary-hover)"
+                    className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Description (optional)
@@ -940,42 +870,11 @@ export default function CreatePage() {
                     onChange={(e) => setDishDescription(e.target.value)}
                     placeholder="Describe the dish..."
                     rows={3}
-                    className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-(--primary-hover) resize-none"
+                    className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Dish Photo
-                  </label>
-                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-(--primary-dark) transition-colors cursor-pointer">
-                    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <svg
-                        className="w-6 h-6 text-gray-400"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-                        />
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-                        />
-                      </svg>
-                    </div>
-                    <p className="text-sm text-gray-500">Tap to take a photo</p>
-                  </div>
                 </div>
               </div>
             </div>
-
             <button
               onClick={() => setStep(4)}
               disabled={!dishName.trim()}
@@ -986,14 +885,13 @@ export default function CreatePage() {
           </div>
         )}
 
-        {/* Step 4: Confirm */}
+        {/* Step 4: Confirm & Create */}
         {step === 4 && selectedRestaurant && (
           <div className="space-y-6">
             <div className="bg-white border border-gray-200 rounded-2xl p-6">
               <h3 className="font-semibold text-gray-900 mb-4">
                 Review Your Token
               </h3>
-
               <div className="space-y-4">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Restaurant</span>
@@ -1015,71 +913,23 @@ export default function CreatePage() {
                   <span className="text-gray-500">Mint Amount</span>
                   <span className="font-medium text-gray-900">$0.10 USDC</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Creator Fee</span>
-                  <span className="font-medium text-gray-900">2.5%</span>
-                </div>
               </div>
             </div>
 
-            <div className="bg-primary-softer border border-primary rounded-xl p-4">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-primary-soft rounded-full flex items-center justify-center shrink-0">
-                  <svg
-                    className="w-4 h-4 text-primary-dark"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="font-medium text-gray-900">
-                    You{"'"}ll be the creator!
-                  </p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Earn 2.5% on all future trades.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Transaction Progress */}
+            {/* Progress Info */}
             {isCreating && (
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                 <div className="flex items-center gap-3">
                   <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
-                  <div>
-                    <p className="font-medium text-blue-800">
-                      {getProgressMessage()}
-                    </p>
-                  </div>
+                  <p className="font-medium text-blue-800">
+                    {getProgressMessage()}
+                  </p>
                 </div>
               </div>
             )}
 
-            {displayError && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                <p className="text-red-700 text-sm font-medium mb-2">
-                  {displayError}
-                </p>
-                {debugInfo.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-red-200">
-                    <p className="text-xs text-red-600 font-medium mb-1">
-                      Debug Info:
-                    </p>
-                    <div className="text-xs text-red-500 space-y-0.5 font-mono">
-                      {debugInfo.map((info, i) => (
-                        <p key={i}>{info}</p>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Debug info when creating */}
-            {isCreating && debugInfo.length > 0 && (
+            {/* Debug Info */}
+            {debugInfo.length > 0 && (
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
                 <p className="text-xs text-gray-500 font-medium mb-1">
                   Progress:
@@ -1092,12 +942,19 @@ export default function CreatePage() {
               </div>
             )}
 
+            {/* Error */}
+            {displayError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <p className="text-red-700 text-sm">{displayError}</p>
+              </div>
+            )}
+
             <button
               onClick={handleCreateDish}
-              disabled={isCreating || isSendingCalls || isCheckingStatus}
+              disabled={isCreating || isSetupPending || isMintPending}
               className="w-full btn-primary disabled:opacity-60 font-semibold py-4 rounded-xl flex items-center justify-center gap-2"
             >
-              {isCreating || isSendingCalls ? (
+              {isCreating ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   {getButtonText()}
