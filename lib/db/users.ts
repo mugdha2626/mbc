@@ -41,7 +41,8 @@ export async function findUserByFid(fid: string): Promise<User | null> {
  */
 export async function upsertUser(
   fid: string,
-  username: string
+  username: string,
+  walletAddress: string
 ): Promise<User> {
   const db = await getDb();
 
@@ -49,12 +50,12 @@ export async function upsertUser(
     { fid },
     {
       $set: {
-        username, // Update username in case it changed
+        username, 
+        walletAddress, 
       },
       $setOnInsert: {
         fid,
         badges: [],
-        walletAddress: "",
         portfolio: createDefaultPortfolio(),
         reputationScore: 0,
         wishList: [],

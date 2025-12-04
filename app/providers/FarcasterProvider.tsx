@@ -8,6 +8,7 @@ interface FarcasterUser {
   username?: string;
   displayName?: string;
   pfpUrl?: string;
+  walletAddress?: string;
 }
 
 interface FarcasterContextType {
@@ -34,24 +35,37 @@ export function FarcasterProvider({
 
   useEffect(() => {
     const load = async () => {
-      try {
-        // IMPORTANT: Call ready() FIRST to hide splash screen
-        await sdk.actions.ready();
 
-        // Then get context from SDK
+      try {
+        await sdk.actions.ready();
         const context = await sdk.context;
 
-        // Extract user info if available
         if (context?.user) {
+          let walletAddress: string | undefined;
+
+          try {
+            const ethProvider = sdk.wallet.ethProvider;
+            if (ethProvider) {
+              const accounts = await ethProvider.request({
+                method: "eth_requestAccounts",
+              });
+              if (accounts && accounts.length > 0) {
+                walletAddress = accounts[0];
+              }
+            }
+          } catch (err) {
+            console.error("Failed to get wallet address:", err);
+          }
+
           const userData = {
             fid: context.user.fid,
             username: context.user.username,
             displayName: context.user.displayName,
             pfpUrl: context.user.pfpUrl,
+            walletAddress,
           };
           setUser(userData);
 
-          // Sync user to our MongoDB (Farcaster handles auth, we just store app data)
           try {
             await fetch("/api/auth/sync", {
               method: "POST",
@@ -59,6 +73,7 @@ export function FarcasterProvider({
               body: JSON.stringify({
                 fid: userData.fid,
                 username: userData.username,
+                walletAddress: userData.walletAddress,
               }),
             });
           } catch (err) {
@@ -69,7 +84,6 @@ export function FarcasterProvider({
         setIsSDKLoaded(true);
       } catch (error) {
         console.error("Failed to load Farcaster SDK:", error);
-        // Still mark as loaded so app doesn't hang forever
         setIsSDKLoaded(true);
       }
     };

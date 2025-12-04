@@ -4,7 +4,7 @@ import { upsertUser } from "@/lib/db/users";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { fid, username } = body;
+    const { fid, username, walletAddress } = body;
 
     if (!fid) {
       return NextResponse.json(
@@ -13,8 +13,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create or update user in MongoDB
-    const user = await upsertUser(fid.toString(), username || "");
+    const user = await upsertUser(
+      fid.toString(),
+      username || "",
+      walletAddress || ""
+    );
 
     return NextResponse.json({ user });
   } catch (error) {
