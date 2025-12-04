@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { BottomNav } from "./components/layout/BottomNav";
 import { GoogleMapView } from "./components/map/GoogleMapView";
 import { getCurrentPosition } from "@/lib/geo";
+import { Dish } from "./interface";
 
 interface SearchResult {
   id: string;
@@ -133,14 +134,14 @@ export default function Home() {
 
         // Add dishes
         if (data.dishes) {
-          data.dishes.forEach((d: any) => {
+          data.dishes.forEach((d: Dish) => {
             results.push({
-              id: d.tokenAdrress || d._id,
-              name: d.name,
+              id: d.dishId,
+              name: d.dishId,
               type: "dish",
-              subtitle: d.restaurantName || "",
-              lat: d.restaurantLat,
-              lng: d.restaurantLng,
+              subtitle: d.restaurant || "",
+              lat: d.restaurant.latitude,
+              lng: d.restaurant.longitude,
             });
           });
         }

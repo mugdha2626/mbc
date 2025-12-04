@@ -38,6 +38,7 @@ export interface Restaurant {
 
 export interface Dish {
   dishId: DishId;
+  name: string;
   startingPrice: number;
   currentPrice: number;
   dailyPriceChange: number;

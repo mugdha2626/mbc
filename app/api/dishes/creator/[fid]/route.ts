@@ -28,12 +28,11 @@ export async function GET(
           .findOne({ id: dish.restaurant });
 
         return {
-          tokenAdrress: dish.tokenAdrress,
+          dishId: dish.dishId,
           name: dish.name,
-          image: dish.image || "",
           currentPrice: dish.currentPrice,
           totalHolders: dish.totalHolders,
-          restaurant: restaurant?.name || "",
+          restaurant: restaurant?.id || "",
         };
       })
     );

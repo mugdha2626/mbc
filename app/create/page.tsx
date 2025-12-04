@@ -62,6 +62,7 @@ export default function CreatePage() {
     data: callsId,
     isPending: isSendingCalls,
     error: sendCallsError,
+    reset: resetSendCalls,
   } = useSendCalls();
 
   // Check calls status
@@ -99,6 +100,7 @@ export default function CreatePage() {
   const [createStep, setCreateStep] = useState<CreateStep>("idle");
   const [createError, setCreateError] = useState("");
   const [dishId, setDishId] = useState<Hash | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string[]>([]);
 
   // Get user's current location for biased search
   const [userLocation, setUserLocation] = useState<{
@@ -128,15 +130,90 @@ export default function CreatePage() {
       });
   }, []);
 
-  // Watch for calls completion
+  // Watch for sendCalls to complete (when we get callsId)
   useEffect(() => {
-    if (callsStatus?.status === "success" && createStep === "waiting") {
-      console.log("Calls confirmed!", callsStatus);
-      setCreateStep("saving");
-      saveToDatabase();
+    if (callsId?.id && createStep === "sending") {
+      console.log("Calls submitted, ID:", callsId.id);
+      setCreateStep("waiting");
+    }
+  }, [callsId?.id, createStep]);
+
+  // Watch for sendCalls error
+  useEffect(() => {
+    if (sendCallsError && createStep === "sending") {
+      console.error("sendCalls error:", sendCallsError);
+      setCreateError(sendCallsError.message || "Transaction failed");
+      setCreateStep("idle");
+    }
+  }, [sendCallsError, createStep]);
+
+  // Watch for calls completion or failure
+  useEffect(() => {
+    if (createStep === "waiting" && callsStatus) {
+      console.log("Calls status update:", callsStatus);
+
+      const status = callsStatus.status;
+
+      if (status === "success") {
+        console.log("Calls confirmed!", callsStatus);
+        setCreateStep("saving");
+        saveToDatabase();
+      } else if (status === "pending") {
+        // Still waiting, do nothing
+        console.log("Still pending...");
+      } else if (status === "failure") {
+        // Status says failure - but let's check if receipts say success
+        const receipts = callsStatus.receipts as
+          | Array<{
+              status?: string | number;
+              transactionHash?: string;
+            }>
+          | undefined;
+
+        if (receipts && receipts.length > 0) {
+          // Check if all receipts actually succeeded
+          // Receipt status can be: "success", "0x1", 1, "1"
+          const allSuccess = receipts.every((r) => {
+            const s = r.status;
+            return s === "success" || s === "0x1" || s === 1 || s === "1";
+          });
+
+          // Get transaction hashes for debugging/proceeding
+          const txHashes = receipts
+            .filter((r) => r.transactionHash)
+            .map((r) => r.transactionHash);
+
+          if (allSuccess) {
+            console.log("Receipts show success - proceeding!");
+            setCreateStep("saving");
+            saveToDatabase();
+            return;
+          }
+
+          // If we have tx hashes but status is unclear, show info and let user decide
+          if (txHashes.length > 0) {
+            const receiptStatuses = receipts
+              .map((r) => String(r.status))
+              .join(", ");
+            setCreateError(
+              `Status unclear (${receiptStatuses}). Verify on BaseScan: ${txHashes.join(
+                ", "
+              )} - If success, refresh the page.`
+            );
+          } else {
+            setCreateError(
+              `Transaction failed. No transaction hash available.`
+            );
+          }
+        } else {
+          setCreateError(`Transaction failed. No receipt details.`);
+        }
+
+        setCreateStep("idle");
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [callsStatus?.status, createStep]);
+  }, [callsStatus, createStep]);
 
   // Check if dish exists in database
   const checkDishExists = async (
@@ -220,9 +297,11 @@ export default function CreatePage() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to save dish");
+        console.error("Save dish API error:", data);
+        throw new Error(data.error || `Failed to save dish (${res.status})`);
       }
 
+      console.log("Dish saved successfully:", data);
       setCreateStep("complete");
       router.push(`/dish/${dishId}`);
     } catch (err) {
@@ -249,12 +328,30 @@ export default function CreatePage() {
     }
 
     if (!TMAP_DISHES_ADDRESS || !USDC_ADDRESS) {
-      setCreateError("Contract addresses not configured.");
+      setCreateError(
+        "Contract addresses not configured. Check your .env file."
+      );
+      console.error(
+        "Missing addresses - TMAP:",
+        TMAP_DISHES_ADDRESS,
+        "USDC:",
+        USDC_ADDRESS
+      );
       return;
     }
 
     setCreateError("");
+    setDebugInfo([]);
+    resetSendCalls(); // Clear any previous transaction state
     setCreateStep("checking");
+
+    const addDebug = (msg: string) => {
+      setDebugInfo((prev) => [...prev, msg]);
+    };
+
+    addDebug(`TMAP: ${TMAP_DISHES_ADDRESS?.slice(0, 10)}...`);
+    addDebug(`USDC: ${USDC_ADDRESS?.slice(0, 10)}...`);
+    addDebug(`Wallet: ${address?.slice(0, 10)}...`);
 
     try {
       // Step 1: Check if dish already exists
@@ -266,17 +363,51 @@ export default function CreatePage() {
 
       const targetDishId = existingDishId as Hash;
       setDishId(targetDishId);
-      console.log("Dish exists:", exists, "DishId:", targetDishId);
+      addDebug(`DishId: ${targetDishId.slice(0, 10)}...`);
+      addDebug(`DB exists: ${exists}`);
 
       // Step 2: Check USDC balance
       const balance = await checkBalance(address);
-      console.log("USDC balance:", balance.toString());
+      const balanceUSDC = Number(balance) / 1e6;
+      addDebug(`USDC Balance: ${balanceUSDC}`);
 
       if (balance < INITIAL_MINT_AMOUNT) {
         throw new Error(
-          `Insufficient USDC balance. You have ${
-            Number(balance) / 1e6
-          } USDC, need ${Number(INITIAL_MINT_AMOUNT) / 1e6} USDC`
+          `Insufficient USDC balance. You have ${balanceUSDC} USDC, need ${
+            Number(INITIAL_MINT_AMOUNT) / 1e6
+          } USDC. Get test USDC from Circle's faucet.`
+        );
+      }
+
+      // Step 2b: Check if dish already exists on-chain (prevents DishAlreadyExists error)
+      let dishExistsOnChain = false;
+      try {
+        const onChainDish = await publicClient.readContract({
+          address: TMAP_DISHES_ADDRESS,
+          abi: [
+            {
+              name: "dishes",
+              type: "function",
+              stateMutability: "view",
+              inputs: [{ name: "", type: "bytes32" }],
+              outputs: [
+                { name: "creator", type: "address" },
+                { name: "totalSupply", type: "uint256" },
+                { name: "createdAt", type: "uint256" },
+                { name: "metadata", type: "string" },
+                { name: "exists", type: "bool" },
+              ],
+            },
+          ] as const,
+          functionName: "dishes",
+          args: [targetDishId],
+        });
+        dishExistsOnChain = onChainDish[4]; // exists field
+        addDebug(`On-chain exists: ${dishExistsOnChain}`);
+      } catch {
+        addDebug(`Contract read FAILED`);
+        throw new Error(
+          "Cannot read from TmapDishes contract. Is it deployed on Base Sepolia?"
         );
       }
 
@@ -285,28 +416,30 @@ export default function CreatePage() {
         address,
         TMAP_DISHES_ADDRESS
       );
-      console.log("Current allowance:", currentAllowance.toString());
+      const allowanceUSDC = Number(currentAllowance) / 1e6;
+      addDebug(`Allowance: ${allowanceUSDC} USDC`);
       const needsApproval = currentAllowance < INITIAL_MINT_AMOUNT;
+      addDebug(`Needs approval: ${needsApproval}`);
 
       // Build the calls array
-      const calls: { to: Address; data: Hash }[] = [];
+      const calls: { to: Address; data: `0x${string}` }[] = [];
+      const callNames: string[] = [];
 
       // Add approve call if needed
       if (needsApproval) {
-        console.log("Adding approve call...");
         calls.push({
           to: USDC_ADDRESS,
           data: encodeFunctionData({
             abi: erc20Abi,
             functionName: "approve",
-            args: [TMAP_DISHES_ADDRESS, INITIAL_MINT_AMOUNT * BigInt(1000)], // Approve extra
+            args: [TMAP_DISHES_ADDRESS, INITIAL_MINT_AMOUNT * BigInt(1000)],
           }),
         });
+        callNames.push("approve");
       }
 
-      // Add createDish call if new dish
-      if (!exists) {
-        console.log("Adding createDish call...");
+      // Add createDish call if dish doesn't exist on chain
+      if (!dishExistsOnChain) {
         const metadata = JSON.stringify({
           name: dishName.trim(),
           description: dishDescription.trim() || "",
@@ -323,10 +456,10 @@ export default function CreatePage() {
             args: [targetDishId, metadata],
           }),
         });
+        callNames.push("createDish");
       }
 
       // Add mint call
-      console.log("Adding mint call...");
       calls.push({
         to: TMAP_DISHES_ADDRESS,
         data: encodeFunctionData({
@@ -335,16 +468,22 @@ export default function CreatePage() {
           args: [targetDishId, INITIAL_MINT_AMOUNT, zeroAddress],
         }),
       });
+      callNames.push("mint");
 
-      console.log("Sending", calls.length, "calls...");
+      addDebug(`Calls: ${callNames.join(" → ")}`);
+      console.log("Sending", calls.length, "calls:");
+      calls.forEach((call, i) => {
+        console.log(
+          `  Call ${i + 1}: to=${call.to}, data=${call.data.slice(0, 66)}...`
+        );
+      });
       setCreateStep("sending");
 
-      // Send all calls at once
+      // Send all calls at once - the useEffect will handle the transition to "waiting"
       sendCalls({
         calls,
       });
-
-      setCreateStep("waiting");
+      // Don't set "waiting" here - wait for callsId in useEffect
     } catch (err) {
       console.error("Error in handleCreateDish:", err);
       setCreateError(
@@ -592,7 +731,7 @@ export default function CreatePage() {
                     key={restaurant.id}
                     onClick={() => {
                       setSelectedRestaurant(restaurant);
-                      setStep(2);
+                      setStep(3);
                     }}
                     className={`w-full text-left bg-white border rounded-xl p-4 hover:border-(--primary-hover) transition-colors ${
                       selectedRestaurant?.id === restaurant.id
@@ -618,7 +757,7 @@ export default function CreatePage() {
                   {selectedRestaurant.name}
                 </p>
                 <button
-                  onClick={() => setStep(2)}
+                  onClick={() => setStep(3)}
                   className="mt-3 w-full btn-primary font-semibold py-3 rounded-xl"
                 >
                   Continue
@@ -920,8 +1059,36 @@ export default function CreatePage() {
             )}
 
             {displayError && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
-                <p className="text-red-700 text-sm">{displayError}</p>
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <p className="text-red-700 text-sm font-medium mb-2">
+                  {displayError}
+                </p>
+                {debugInfo.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-red-200">
+                    <p className="text-xs text-red-600 font-medium mb-1">
+                      Debug Info:
+                    </p>
+                    <div className="text-xs text-red-500 space-y-0.5 font-mono">
+                      {debugInfo.map((info, i) => (
+                        <p key={i}>{info}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Debug info when creating */}
+            {isCreating && debugInfo.length > 0 && (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                <p className="text-xs text-gray-500 font-medium mb-1">
+                  Progress:
+                </p>
+                <div className="text-xs text-gray-600 space-y-0.5 font-mono">
+                  {debugInfo.map((info, i) => (
+                    <p key={i}>{info}</p>
+                  ))}
+                </div>
               </div>
             )}
 
