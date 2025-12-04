@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { BottomNav } from "./components/layout/BottomNav";
 import { GoogleMapView } from "./components/map/GoogleMapView";
+import { getCurrentPosition } from "@/lib/geo";
 
 interface SearchResult {
   id: string;
@@ -40,7 +41,46 @@ export default function Home() {
   } | null>(null);
   const [restaurants, setRestaurants] = useState<MapRestaurant[]>([]);
   const [isLoadingMap, setIsLoadingMap] = useState(true);
+  const [userLocation, setUserLocation] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+  const [nearbyCount, setNearbyCount] = useState<number | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
+
+  // Fetch user's current location on mount
+  useEffect(() => {
+    getCurrentPosition()
+      .then((pos) => {
+        setUserLocation({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
+      })
+      .catch(() => {
+        // Location unavailable - will use default center
+      });
+  }, []);
+
+  // Fetch nearby count when user location is available
+  useEffect(() => {
+    if (!userLocation) return;
+
+    const fetchNearbyCount = async () => {
+      try {
+        const res = await fetch(
+          `/api/restaurants/nearby-count?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=5`
+        );
+        const data = await res.json();
+        if (typeof data.count === "number") {
+          setNearbyCount(data.count);
+        }
+      } catch (err) {
+        console.error("Failed to fetch nearby count:", err);
+      }
+    };
+    fetchNearbyCount();
+  }, [userLocation]);
 
   // Fetch restaurants for map on mount
   useEffect(() => {
@@ -336,18 +376,27 @@ export default function Home() {
         ) : (
           <GoogleMapView
             apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}
+            center={userLocation}
+            userLocation={userLocation}
             selectedLocation={selectedLocation}
             restaurants={restaurants}
+            showRecenterButton={true}
           />
         )}
 
         {/* Spots Overlay - Top of Map */}
-        {!isLoadingMap && restaurants.length > 0 && (
+        {!isLoadingMap && (nearbyCount !== null || restaurants.length > 0) && (
           <div className="absolute top-4 left-0 right-0 z-10 flex justify-center">
             <div className="inline-flex items-center gap-2 bg-gray-50/95 backdrop-blur-sm rounded-full px-4 py-2 shadow-lg">
               <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               <span className="text-sm text-gray-900 font-medium">
-                {restaurants.length} spots near you
+                {nearbyCount !== null
+                  ? `${nearbyCount} spot${
+                      nearbyCount !== 1 ? "s" : ""
+                    } near you`
+                  : `${restaurants.length} spot${
+                      restaurants.length !== 1 ? "s" : ""
+                    } near you`}
               </span>
             </div>
           </div>

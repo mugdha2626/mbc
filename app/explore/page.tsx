@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { BottomNav } from "@/app/components/layout/BottomNav";
 import { BackedDishCard } from "@/app/components/cards/BackedDishCard";
+import { GoogleMapView } from "@/app/components/map/GoogleMapView";
+import { getCurrentPosition } from "@/lib/geo";
 
 const exploreFilters = [
   { id: "trending", label: "Trending" },
@@ -50,6 +52,21 @@ const trendingDishes = [
 export default function ExplorePage() {
   const [activeTab, setActiveTab] = useState<"dishes" | "restaurants">("dishes");
   const [activeFilter, setActiveFilter] = useState("trending");
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Fetch user's current location on mount
+  useEffect(() => {
+    getCurrentPosition()
+      .then((pos) => {
+        setUserLocation({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
+      })
+      .catch(() => {
+        // Location unavailable - will use default center
+      });
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -84,35 +101,15 @@ export default function ExplorePage() {
         </div>
       </div>
 
-      {/* Map Section with Overlay */}
+      {/* Map Section */}
       <div className="relative h-48 bg-gray-200">
-        {/* Map Background */}
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{
-            backgroundImage: "url('https://api.mapbox.com/styles/v1/mapbox/light-v11/static/-73.99,40.73,12,0/400x200@2x?access_token=pk.placeholder')",
-            backgroundColor: "#e5e7eb"
-          }}
-        >
-          {/* Gradient overlay for better text readability */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/40" />
-        </div>
-
-        {/* Spots Count Overlay */}
-        <div className="absolute bottom-4 left-4 right-4">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg">
-              <svg className="w-5 h-5 text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-white font-semibold text-lg drop-shadow-md">12 spots near you</p>
-              <p className="text-white/80 text-sm drop-shadow-md">Within 5 miles</p>
-            </div>
-          </div>
-        </div>
+        <GoogleMapView
+          apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}
+          center={userLocation}
+          userLocation={userLocation}
+          showRecenterButton={true}
+          restaurants={[]}
+        />
       </div>
 
       {/* Filters - Center Aligned */}
