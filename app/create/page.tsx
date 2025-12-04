@@ -321,7 +321,7 @@ export default function CreatePage() {
           address: USDC_ADDRESS,
           abi: ERC20_ABI,
           functionName: "approve",
-          args: [TMAP_DISHES_ADDRESS, INITIAL_MINT_AMOUNT * BigInt(100)],
+          args: [TMAP_DISHES_ADDRESS, INITIAL_MINT_AMOUNT], // $1 USDC - exact amount needed
         });
       } else if (exists) {
         // Dish exists, skip approval and createDish, go straight to mint
@@ -885,7 +885,7 @@ export default function CreatePage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Mint Amount</span>
-                  <span className="font-medium text-gray-900">$1.00 USDC</span>
+                  <span className="font-medium text-gray-900">$0.10 USDC</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Creator Fee</span>

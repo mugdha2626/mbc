@@ -6,8 +6,8 @@ export const TMAP_DISHES_ADDRESS = process.env
 export const USDC_ADDRESS = process.env
   .NEXT_PUBLIC_USDC_CONTRACT_ADDRESS as Address;
 
-// Initial mint amount in USDC (with 6 decimals) - $1.00
-export const INITIAL_MINT_AMOUNT = BigInt(1_000_000);
+// Initial mint amount in USDC (with 6 decimals) - $0.10
+export const INITIAL_MINT_AMOUNT = BigInt(100_000);
 
 // TmapDishes contract ABI (only the functions we need)
 export const TMAP_DISHES_ABI = [
