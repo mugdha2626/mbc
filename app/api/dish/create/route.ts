@@ -12,8 +12,8 @@ interface DishDocument extends Dish {
   updatedAt: Date;
 }
 
-// Request body type
-interface CreateDishRequest {
+// Request body type for checking/preparing a dish
+interface PrepareDishRequest {
   name: string;
   description?: string;
   image?: string;
@@ -23,7 +23,11 @@ interface CreateDishRequest {
   restaurantLatitude: number;
   restaurantLongitude: number;
   creatorFid: Fid;
-  // Transaction hashes from frontend contract calls
+}
+
+// Request body for saving after contract creation
+interface SaveDishRequest extends PrepareDishRequest {
+  dishId: DishId;
   createTxHash?: string;
   mintTxHash?: string;
 }
@@ -36,16 +40,54 @@ export function generateDishId(
   restaurantName: string,
   dishName: string
 ): DishId {
-  // Create a unique identifier by hashing restaurant name + dish name
   const combined = `${restaurantName.toLowerCase().trim()}:${dishName
     .toLowerCase()
     .trim()}`;
   return keccak256(toBytes(combined));
 }
 
+/**
+ * GET - Check if dish exists and get dishId
+ * Returns: { exists: boolean, dishId: string, dish?: DishDocument }
+ */
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const restaurantName = searchParams.get("restaurantName");
+  const dishName = searchParams.get("dishName");
+
+  if (!restaurantName || !dishName) {
+    return NextResponse.json(
+      { error: "restaurantName and dishName are required" },
+      { status: 400 }
+    );
+  }
+
+  const dishId = generateDishId(restaurantName, dishName);
+  const db = await getDb();
+
+  // Check if dish exists in database
+  const existingDish = await db.collection("dishes").findOne({ dishId });
+
+  if (existingDish) {
+    return NextResponse.json({
+      exists: true,
+      dishId,
+      dish: existingDish,
+    });
+  }
+
+  return NextResponse.json({
+    exists: false,
+    dishId,
+  });
+}
+
+/**
+ * POST - Save dish to database after contract creation/minting
+ */
 export async function POST(request: NextRequest) {
   try {
-    const body: CreateDishRequest = await request.json();
+    const body: SaveDishRequest = await request.json();
 
     // Validate required fields
     if (!body.name || !body.name.trim()) {
@@ -69,35 +111,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const db = await getDb();
-
-    // Generate unique dishId using restaurant name and dish name
-    const dishId = generateDishId(body.restaurantName, body.name);
-
-    // Check if dish already exists at this restaurant with same name
-    const existingDish = await db.collection("dishes").findOne({
-      dishId: dishId,
-    });
-
-    if (existingDish) {
+    if (!body.dishId) {
       return NextResponse.json(
-        { error: "A dish with this name already exists at this restaurant" },
-        { status: 409 }
+        { error: "Dish ID is required" },
+        { status: 400 }
       );
     }
 
-    // Initial token economics
-    const startingPrice = 0.1; // $0.10
+    const db = await getDb();
 
-    // Create the dish document
+    // Check if dish already exists
+    const existingDish = await db.collection("dishes").findOne({
+      dishId: body.dishId,
+    });
+
+    if (existingDish) {
+      // Dish already exists - just return it (minting was done on existing dish)
+      return NextResponse.json({
+        success: true,
+        dish: existingDish,
+        isNew: false,
+      });
+    }
+
+    // Create new dish document
     const now = new Date();
     const dish: DishDocument = {
-      dishId: dishId,
+      dishId: body.dishId,
       name: body.name.trim(),
       description: body.description?.trim() || undefined,
       image: body.image || undefined,
-      startingPrice: startingPrice,
-      currentPrice: startingPrice,
+      startingPrice: 0.1,
+      currentPrice: 0.1,
       dailyPriceChange: 0,
       currentSupply: 0,
       totalHolders: 0,
@@ -112,13 +157,12 @@ export async function POST(request: NextRequest) {
     // Insert the dish into the database
     const result = await db.collection("dishes").insertOne(dish);
 
-    // Also ensure the restaurant exists in our database
+    // Ensure the restaurant exists in our database
     const existingRestaurant = await db.collection("restaurants").findOne({
       id: body.restaurantId,
     });
 
     if (!existingRestaurant) {
-      // Create the restaurant entry
       await db.collection("restaurants").insertOne({
         id: body.restaurantId,
         name: body.restaurantName,
@@ -132,7 +176,6 @@ export async function POST(request: NextRequest) {
         updatedAt: now,
       });
     } else {
-      // Add dish to restaurant's dish list
       await db.collection("restaurants").updateOne(
         { id: body.restaurantId },
         {
@@ -142,7 +185,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update creator's portfolio (if user exists)
+    // Update creator's portfolio
     await db.collection("users").updateOne(
       { fid: body.creatorFid },
       {
@@ -166,34 +209,14 @@ export async function POST(request: NextRequest) {
           ...dish,
           _id: result.insertedId.toString(),
         },
+        isNew: true,
         createTxHash: body.createTxHash,
         mintTxHash: body.mintTxHash,
       },
       { status: 201 }
     );
   } catch (error) {
-    console.error("Error creating dish:", error);
-    return NextResponse.json(
-      { error: "Failed to create dish" },
-      { status: 500 }
-    );
+    console.error("Error saving dish:", error);
+    return NextResponse.json({ error: "Failed to save dish" }, { status: 500 });
   }
-}
-
-// GET endpoint to generate dishId without creating (for frontend to use before contract call)
-export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
-  const restaurantName = searchParams.get("restaurantName");
-  const dishName = searchParams.get("dishName");
-
-  if (!restaurantName || !dishName) {
-    return NextResponse.json(
-      { error: "restaurantName and dishName are required" },
-      { status: 400 }
-    );
-  }
-
-  const dishId = generateDishId(restaurantName, dishName);
-
-  return NextResponse.json({ dishId });
 }

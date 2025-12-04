@@ -12,7 +12,7 @@ import {
   useWaitForTransactionReceipt,
   useReadContract,
 } from "wagmi";
-import { keccak256, toBytes, zeroAddress } from "viem";
+import { zeroAddress } from "viem";
 import {
   TMAP_DISHES_ABI,
   TMAP_DISHES_ADDRESS,
@@ -23,6 +23,7 @@ import {
 
 type CreateStep =
   | "idle"
+  | "checking"
   | "approving"
   | "creating"
   | "minting"
@@ -57,6 +58,7 @@ export default function CreatePage() {
   const [createStep, setCreateStep] = useState<CreateStep>("idle");
   const [createError, setCreateError] = useState("");
   const [dishId, setDishId] = useState<`0x${string}` | null>(null);
+  const [isNewDish, setIsNewDish] = useState(true); // Track if dish is new or existing
 
   // Get user's current location for biased search
   const [userLocation, setUserLocation] = useState<{
@@ -132,14 +134,20 @@ export default function CreatePage() {
       });
   }, []);
 
-  // Handle approval success -> create dish
+  // Handle approval success -> create dish or mint (depending on isNewDish)
   useEffect(() => {
     if (isApproveSuccess && createStep === "approving" && dishId) {
-      setCreateStep("creating");
-      createDishOnChain();
+      if (isNewDish) {
+        setCreateStep("creating");
+        createDishOnChain();
+      } else {
+        // Existing dish - skip create, go straight to mint
+        setCreateStep("minting");
+        mintTokens();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isApproveSuccess, createStep, dishId]);
+  }, [isApproveSuccess, createStep, dishId, isNewDish]);
 
   // Handle create dish success -> mint
   useEffect(() => {
@@ -175,18 +183,7 @@ export default function CreatePage() {
     }
   }, [approveError, createDishError, mintError]);
 
-  // Generate dishId helper
-  const generateDishId = (
-    restaurantName: string,
-    dishName: string
-  ): `0x${string}` => {
-    const combined = `${restaurantName.toLowerCase().trim()}:${dishName
-      .toLowerCase()
-      .trim()}`;
-    return keccak256(toBytes(combined));
-  };
-
-  // Create dish on chain
+  // Create dish on chain (only for new dishes)
   const createDishOnChain = () => {
     if (!dishId || !selectedRestaurant) return;
 
@@ -206,7 +203,7 @@ export default function CreatePage() {
     });
   };
 
-  // Mint initial tokens
+  // Mint tokens (works for both new and existing dishes)
   const mintTokens = () => {
     if (!dishId) return;
 
@@ -229,6 +226,7 @@ export default function CreatePage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          dishId: dishId,
           name: dishName.trim(),
           description: dishDescription.trim() || undefined,
           restaurantId: selectedRestaurant.id,
@@ -260,7 +258,26 @@ export default function CreatePage() {
     }
   };
 
-  // Main create dish handler
+  // Check if dish exists in database
+  const checkDishExists = async (
+    restaurantName: string,
+    dishName: string
+  ): Promise<{ exists: boolean; dishId: string }> => {
+    const params = new URLSearchParams({
+      restaurantName,
+      dishName,
+    });
+
+    const res = await fetch(`/api/dish/create?${params}`);
+    const data = await res.json();
+
+    return {
+      exists: data.exists || false,
+      dishId: data.dishId,
+    };
+  };
+
+  // Main create/mint dish handler
   const handleCreateDish = async () => {
     if (!selectedRestaurant || !dishName.trim()) return;
 
@@ -280,29 +297,44 @@ export default function CreatePage() {
     }
 
     setCreateError("");
+    setCreateStep("checking");
 
-    // Generate dishId
-    const newDishId = generateDishId(selectedRestaurant.name, dishName);
-    setDishId(newDishId);
+    try {
+      // Step 1: Check if dish already exists
+      const { exists, dishId: existingDishId } = await checkDishExists(
+        selectedRestaurant.name,
+        dishName
+      );
 
-    // Check if we need to approve USDC first
-    const currentAllowance = allowance as bigint | undefined;
-    const needsApproval =
-      !currentAllowance || currentAllowance < INITIAL_MINT_AMOUNT;
+      const targetDishId = existingDishId as `0x${string}`;
+      setDishId(targetDishId);
+      setIsNewDish(!exists);
 
-    if (needsApproval) {
-      setCreateStep("approving");
-      writeApprove({
-        address: USDC_ADDRESS,
-        abi: ERC20_ABI,
-        functionName: "approve",
-        args: [TMAP_DISHES_ADDRESS, INITIAL_MINT_AMOUNT * BigInt(100)], // Approve extra for future mints
-      });
-    } else {
-      // Skip approval, go straight to creating
-      setCreateStep("creating");
-      // Need to wait for state update, so use setTimeout
-      setTimeout(() => {
+      // Step 2: Check if we need to approve USDC
+      const currentAllowance = allowance as bigint | undefined;
+      const needsApproval =
+        !currentAllowance || currentAllowance < INITIAL_MINT_AMOUNT;
+
+      if (needsApproval) {
+        setCreateStep("approving");
+        writeApprove({
+          address: USDC_ADDRESS,
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [TMAP_DISHES_ADDRESS, INITIAL_MINT_AMOUNT * BigInt(100)],
+        });
+      } else if (exists) {
+        // Dish exists, skip approval and createDish, go straight to mint
+        setCreateStep("minting");
+        writeMint({
+          address: TMAP_DISHES_ADDRESS,
+          abi: TMAP_DISHES_ABI,
+          functionName: "mint",
+          args: [targetDishId, INITIAL_MINT_AMOUNT, zeroAddress],
+        });
+      } else {
+        // New dish, skip approval, go to createDish
+        setCreateStep("creating");
         const metadata = JSON.stringify({
           name: dishName.trim(),
           description: dishDescription.trim() || "",
@@ -315,9 +347,13 @@ export default function CreatePage() {
           address: TMAP_DISHES_ADDRESS,
           abi: TMAP_DISHES_ABI,
           functionName: "createDish",
-          args: [newDishId, metadata],
+          args: [targetDishId, metadata],
         });
-      }, 100);
+      }
+    } catch (err) {
+      console.error("Error checking dish:", err);
+      setCreateError("Failed to check dish status. Please try again.");
+      setCreateStep("idle");
     }
   };
 
@@ -385,6 +421,8 @@ export default function CreatePage() {
   // Get button text based on current step
   const getButtonText = () => {
     switch (createStep) {
+      case "checking":
+        return "Checking...";
       case "approving":
         return "Approving USDC...";
       case "creating":
@@ -397,6 +435,26 @@ export default function CreatePage() {
         return "Complete!";
       default:
         return "Create Token";
+    }
+  };
+
+  // Get progress message
+  const getProgressMessage = () => {
+    switch (createStep) {
+      case "checking":
+        return "Checking if dish exists...";
+      case "approving":
+        return "Approving USDC spending...";
+      case "creating":
+        return "Creating dish on Base Sepolia...";
+      case "minting":
+        return isNewDish
+          ? "Minting initial tokens..."
+          : "Minting tokens to existing dish...";
+      case "saving":
+        return "Saving to database...";
+      default:
+        return "";
     }
   };
 
@@ -433,42 +491,46 @@ export default function CreatePage() {
 
       {/* Progress Steps */}
       <div className="bg-white px-4 py-4 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          {[1, 2, 3, 4].map((s) => (
-            <div key={s} className="flex-1 flex items-center gap-2">
+        <div className="flex items-center justify-between relative">
+          {/* Connecting lines */}
+          <div className="absolute top-4 left-4 right-4 h-1 flex">
+            {[1, 2, 3].map((s) => (
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                  s < step
-                    ? "bg-green-500 text-white"
-                    : s === step
-                    ? "btn-primary"
-                    : "bg-gray-100 text-gray-400"
+                key={s}
+                className={`flex-1 h-1 ${
+                  s < step ? "bg-green-500" : "bg-gray-200"
                 }`}
-              >
-                {s < step ? (
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                ) : (
-                  s
-                )}
-              </div>
-              {s < 4 && (
-                <div
-                  className={`flex-1 h-1 rounded ${
-                    s < step ? "bg-green-500" : "bg-gray-200"
-                  }`}
-                />
+              />
+            ))}
+          </div>
+          {/* Bubbles */}
+          {[1, 2, 3, 4].map((s) => (
+            <div
+              key={s}
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium z-10 ${
+                s < step
+                  ? "bg-green-500 text-white"
+                  : s === step
+                  ? "btn-primary"
+                  : "bg-gray-100 text-gray-400"
+              }`}
+            >
+              {s < step ? (
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              ) : (
+                s
               )}
             </div>
           ))}
@@ -816,17 +878,19 @@ export default function CreatePage() {
                   <span className="font-medium text-gray-900">{dishName}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Starting Price</span>
-                  <span className="font-medium text-green-600">$0.10</span>
+                  <span className="text-gray-500">Network</span>
+                  <span className="font-medium text-blue-600">
+                    Base Sepolia
+                  </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Initial Mint</span>
+                  <span className="text-gray-500">Mint Amount</span>
                   <span className="font-medium text-gray-900">$1.00 USDC</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Creator Fee</span>
                   <span className="font-medium text-gray-900">
-                    2% of all trades
+                    2.5% of all trades
                   </span>
                 </div>
               </div>
@@ -848,7 +912,7 @@ export default function CreatePage() {
                     You{"'"}ll be the creator!
                   </p>
                   <p className="text-sm text-gray-600 mt-1">
-                    Earn 2% on all future trades of this token.
+                    Earn 2.5% on all future trades of this token.
                   </p>
                 </div>
               </div>
@@ -861,14 +925,13 @@ export default function CreatePage() {
                   <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
                   <div>
                     <p className="font-medium text-blue-800">
-                      {createStep === "approving" && "Approving USDC..."}
-                      {createStep === "creating" && "Creating dish on chain..."}
-                      {createStep === "minting" && "Minting initial tokens..."}
-                      {createStep === "saving" && "Saving to database..."}
+                      {getProgressMessage()}
                     </p>
-                    <p className="text-sm text-blue-600 mt-1">
-                      Please confirm the transaction in your wallet
-                    </p>
+                    {createStep !== "checking" && createStep !== "saving" && (
+                      <p className="text-sm text-blue-600 mt-1">
+                        Please confirm the transaction in your wallet
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -876,7 +939,7 @@ export default function CreatePage() {
 
             {createError && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
-                <p className="text-red-700">{createError}</p>
+                <p className="text-red-700 text-sm">{createError}</p>
               </div>
             )}
 

@@ -1,22 +1,13 @@
 "use client";
 
-import { useFarcaster } from "@/app/providers/FarcasterProvider";
+import { useState, useEffect } from "react";
 import { BottomNav } from "@/app/components/layout/BottomNav";
 import { BackedDishCard } from "@/app/components/cards/BackedDishCard";
 import { MiniTasteMap } from "@/app/components/map/MiniTasteMap";
+import getFid from "@/app/providers/Fid";
+import type { User } from "@/app/interface";
 
-const userStats = {
-  portfolioValue: "$142.50",
-  portfolioChange: 12.5,
-  reputation: 850,
-  rank: "Local Tastemaker",
-};
-
-const badges = [
-  { id: "1", label: "EARLY BIRD", color: "yellow" },
-  { id: "2", label: "SPICY EXPERT", color: "gray" },
-];
-
+// Mock taste spots for now (would come from user's dish locations later)
 const tasteSpots = [
   { id: "1", image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200", x: 25, y: 35 },
   { id: "2", image: "https://images.unsplash.com/photo-1454496522488-7a8e488e8606?w=200", x: 45, y: 50 },
@@ -24,55 +15,81 @@ const tasteSpots = [
   { id: "4", image: "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=200", x: 30, y: 70 },
 ];
 
-const backedDishes = [
-  {
-    id: "1",
-    name: "Dan Dan Noodles",
-    image: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400",
-    restaurant: "Spicy Moon",
-    creator: "spicy_boi",
-    price: 4.20,
-    priceChange: 5.2,
-    holders: 342,
-    marketCap: "$17.6k",
-  },
-  {
-    id: "2",
-    name: "Mapo Tofu",
-    image: "https://images.unsplash.com/photo-1582576163090-09d3b6f8a969?w=400",
-    restaurant: "Spicy Moon",
-    creator: "foodie_hero",
-    price: 2.10,
-    priceChange: 5.2,
-    holders: 120,
-    marketCap: "$3.1k",
-  },
-  {
-    id: "3",
-    name: "Cheese Slice",
-    image: "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400",
-    restaurant: "Joe's Pizza",
-    creator: "portnoy_fan",
-    price: 8.50,
-    priceChange: 5.2,
-    holders: 1500,
-    marketCap: "$102.0k",
-  },
-  {
-    id: "4",
-    name: "Malted Pancakes",
-    image: "https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400",
-    restaurant: "Sunday in Brooklyn",
-    creator: "brunch_queen",
-    price: 5.40,
-    priceChange: 5.2,
-    holders: 600,
-    marketCap: "$32.4k",
-  },
-];
+// Helper to format currency
+function formatCurrency(value: number): string {
+  if (value >= 1000) {
+    return `$${(value / 1000).toFixed(1)}k`;
+  }
+  return `$${value.toFixed(2)}`;
+}
+
+// Helper to get reputation rank
+function getReputationRank(score: number): string {
+  if (score >= 1000) return "Food Legend";
+  if (score >= 750) return "Master Taster";
+  if (score >= 500) return "Local Tastemaker";
+  if (score >= 250) return "Rising Foodie";
+  if (score >= 100) return "Taste Explorer";
+  return "New Taster";
+}
 
 export default function ProfilePage() {
-  const { user } = useFarcaster();
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [farcasterUser, setFarcasterUser] = useState<{
+    displayName?: string;
+    username?: string;
+    pfpUrl?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const fid = await getFid();
+        if (!fid) {
+          setIsLoading(false);
+          return;
+        }
+
+        // Get Farcaster context for display info
+        const { sdk } = await import("@farcaster/miniapp-sdk");
+        const context = await sdk.context;
+        if (context?.user) {
+          setFarcasterUser({
+            displayName: context.user.displayName,
+            username: context.user.username,
+            pfpUrl: context.user.pfpUrl,
+          });
+        }
+
+        // Fetch user data from our database
+        const res = await fetch(`/api/users/${fid}`);
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data.user);
+        }
+      } catch (err) {
+        console.error("Failed to load user:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadUser();
+  }, []);
+
+  // Calculate return percentage
+  const returnPercentage = user?.portfolio.totalInvested
+    ? ((user.portfolio.totalReturn / user.portfolio.totalInvested) * 100).toFixed(1)
+    : "0";
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -81,35 +98,39 @@ export default function ProfilePage() {
         {/* Profile Info */}
         <div className="flex items-start justify-between mb-6">
           <div className="flex items-center gap-4">
-            {user?.pfpUrl ? (
+            {farcasterUser?.pfpUrl ? (
               <img
-                src={user.pfpUrl}
-                alt={user.username || "Profile"}
+                src={farcasterUser.pfpUrl}
+                alt={farcasterUser.username || "Profile"}
                 className="w-20 h-20 rounded-full object-cover"
               />
             ) : (
               <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center">
-                <img
-                  src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200"
-                  alt="Profile"
-                  className="w-full h-full rounded-full object-cover"
-                />
+                <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
               </div>
             )}
             <div>
               <h1 className="text-xl font-bold text-gray-900">
-                {user?.displayName || "Alex Taster"}
+                {farcasterUser?.displayName || user?.username || "Anonymous"}
               </h1>
-              <p className="text-gray-500">@{user?.username || "foodie_hero"}</p>
-              <div className="flex gap-2 mt-2">
-                {badges.map((badge) => (
-                  <span
-                    key={badge.id}
-                    className={`badge ${badge.color === "yellow" ? "badge-yellow" : "badge-gray"}`}
-                  >
-                    {badge.label}
-                  </span>
-                ))}
+              <p className="text-gray-500">
+                @{farcasterUser?.username || user?.username || "user"}
+              </p>
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {user?.badges && user.badges.length > 0 ? (
+                  user.badges.map((badge, index) => (
+                    <span
+                      key={index}
+                      className={`badge ${index === 0 ? "badge-yellow" : "badge-gray"}`}
+                    >
+                      {badge}
+                    </span>
+                  ))
+                ) : (
+                  <span className="badge badge-gray">NEW TASTER</span>
+                )}
               </div>
             </div>
           </div>
@@ -130,13 +151,23 @@ export default function ProfilePage() {
               </svg>
               PORTFOLIO VALUE
             </div>
-            <p className="text-2xl font-bold text-gray-900">{userStats.portfolioValue}</p>
-            <p className="text-sm text-green-600 flex items-center gap-1">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17l5-5 5 5" />
-              </svg>
-              +{userStats.portfolioChange}% this week
+            <p className="text-2xl font-bold text-gray-900">
+              {formatCurrency(user?.portfolio.totalValue || 0)}
             </p>
+            {user?.portfolio.totalReturn !== undefined && (
+              <p className={`text-sm flex items-center gap-1 ${user.portfolio.totalReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {user.portfolio.totalReturn >= 0 ? (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17l5-5 5 5" />
+                  </svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 7l-5 5-5-5" />
+                  </svg>
+                )}
+                {user.portfolio.totalReturn >= 0 ? '+' : ''}{returnPercentage}% return
+              </p>
+            )}
           </div>
           <div className="bg-gray-50 rounded-2xl p-4">
             <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
@@ -145,8 +176,38 @@ export default function ProfilePage() {
               </svg>
               REPUTATION
             </div>
-            <p className="text-2xl font-bold text-primary-dark">{userStats.reputation}</p>
-            <p className="text-sm text-gray-500">Rank: {userStats.rank}</p>
+            <p className="text-2xl font-bold text-primary-dark">
+              {user?.reputationScore || 0}
+            </p>
+            <p className="text-sm text-gray-500">
+              {getReputationRank(user?.reputationScore || 0)}
+            </p>
+          </div>
+        </div>
+
+        {/* Additional Stats Row */}
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          <div className="bg-gray-50 rounded-2xl p-4">
+            <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              TOTAL INVESTED
+            </div>
+            <p className="text-xl font-bold text-gray-900">
+              {formatCurrency(user?.portfolio.totalInvested || 0)}
+            </p>
+          </div>
+          <div className="bg-gray-50 rounded-2xl p-4">
+            <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              DISHES BACKED
+            </div>
+            <p className="text-xl font-bold text-gray-900">
+              {user?.portfolio.dishes.length || 0}
+            </p>
           </div>
         </div>
       </div>
@@ -160,7 +221,9 @@ export default function ProfilePage() {
             </svg>
             <h2 className="text-lg font-semibold text-gray-900">Your Taste Map</h2>
           </div>
-          <span className="text-sm font-medium text-primary-dark">{tasteSpots.length} Spots</span>
+          <span className="text-sm font-medium text-primary-dark">
+            {user?.portfolio.dishes.length || 0} Spots
+          </span>
         </div>
         <MiniTasteMap spots={tasteSpots} location="New York" />
       </div>
@@ -168,16 +231,60 @@ export default function ProfilePage() {
       {/* Backed Dishes Section */}
       <div className="px-4">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Backed Dishes</h2>
-        <div className="space-y-3">
-          {backedDishes.map((dish) => (
-            <BackedDishCard key={dish.id} {...dish} />
-          ))}
-        </div>
+
+        {user?.portfolio.dishes && user.portfolio.dishes.length > 0 ? (
+          <div className="space-y-3">
+            {user.portfolio.dishes.map((holding, index) => (
+              <div
+                key={holding.dish}
+                className="bg-white rounded-2xl p-4 border border-gray-100"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      Dish #{index + 1}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {holding.quantity} tokens
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-medium ${holding.return >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {holding.return >= 0 ? '+' : ''}{formatCurrency(holding.return)}
+                    </p>
+                    {holding.referredBy && (
+                      <p className="text-xs text-gray-400">
+                        Referred by #{holding.referredBy}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl p-8 border border-gray-100 text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            </div>
+            <p className="text-gray-500 mb-4">No dishes backed yet</p>
+            <a
+              href="/explore"
+              className="inline-block btn-primary px-6 py-2 rounded-xl text-sm font-medium"
+            >
+              Explore Dishes
+            </a>
+          </div>
+        )}
 
         {/* View Past Activity */}
-        <button className="btn-dashed mt-4">
-          View Past Activity
-        </button>
+        {user?.portfolio.dishes && user.portfolio.dishes.length > 0 && (
+          <button className="btn-dashed mt-4">
+            View Past Activity
+          </button>
+        )}
       </div>
 
       <BottomNav />

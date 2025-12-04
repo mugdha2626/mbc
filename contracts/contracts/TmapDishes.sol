@@ -22,54 +22,27 @@ import "./libraries/BondingCurve.sol";
 contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
     using BondingCurve for uint256;
 
-    // ============ Constants ============
-
-    // Maximum USDC a user can spend on a single dish ($10 with 6 decimals)
-    uint256 public constant MAX_SPEND_PER_DISH = 10_000_000; // $10 USDC
-
-    // Precision for reward calculations (18 decimals)
+    uint256 public constant MAX_SPEND_PER_DISH = 10_000_000;
     uint256 private constant REWARD_PRECISION = 1e18;
 
-    // ============ State Variables ============
-
-    // USDC token contract
     IERC20 public immutable usdc;
-
-    // Protocol fee recipient (receives referral fee if no referrer)
     address public protocolFeeRecipient;
 
-    // ============ Dish Data ============
-
     struct Dish {
-        address creator; // Original creator of the dish
-        uint256 totalSupply; // Total tokens minted for this dish
-        uint256 createdAt; // Timestamp of creation
-        string metadata; // IPFS hash or URI for dish metadata
-        bool exists; // Whether the dish has been created
+        address creator;
+        uint256 totalSupply;
+        uint256 createdAt;
+        string metadata;
+        bool exists;
     }
 
-    // dishId => Dish data
     mapping(bytes32 => Dish) public dishes;
-
-    // dishId => user => total USDC spent on this dish
     mapping(bytes32 => mapping(address => uint256)) public userSpent;
-
-    // dishId => user => token balance (shadow balance for reward calculation)
     mapping(bytes32 => mapping(address => uint256)) private _balances;
 
-    // ============ Reward System ============
-
-    // Cumulative reward per token for each dish (scaled by REWARD_PRECISION)
-    // This increases every time someone mints
     mapping(bytes32 => uint256) public rewardPerTokenStored;
-
-    // User's reward per token checkpoint (when they last claimed or minted)
     mapping(bytes32 => mapping(address => uint256)) public userRewardPerTokenPaid;
-
-    // User's pending rewards that haven't been claimed yet
     mapping(bytes32 => mapping(address => uint256)) public pendingRewards;
-
-    // ============ Events ============
 
     event DishCreated(
         bytes32 indexed dishId,
@@ -103,23 +76,13 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
 
     event ProtocolFeeRecipientUpdated(address indexed newRecipient);
 
-    // ============ Errors ============
-
     error DishAlreadyExists();
     error DishDoesNotExist();
     error ZeroAmount();
     error ExceedsMaxSpend();
     error InsufficientBalance();
-    error InvalidReferrer();
     error TransferFailed();
 
-    // ============ Constructor ============
-
-    /**
-     * @notice Initialize the TmapDishes contract
-     * @param _usdc Address of the USDC token contract
-     * @param _protocolFeeRecipient Address to receive protocol fees
-     */
     constructor(
         address _usdc,
         address _protocolFeeRecipient
@@ -127,8 +90,6 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
         usdc = IERC20(_usdc);
         protocolFeeRecipient = _protocolFeeRecipient;
     }
-
-    // ============ External Functions ============
 
     /**
      * @notice Create a new dish token
@@ -153,7 +114,7 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
      * @notice Mint dish tokens by spending USDC
      * @param dishId The dish to mint
      * @param usdcAmount Amount of USDC to spend (max $10 per user per dish)
-     * @param referrer Address of the referrer (must hold tokens or be creator)
+     * @param referrer Address of the referrer
      */
     function mint(
         bytes32 dishId,
@@ -164,7 +125,6 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
         if (!dish.exists) revert DishDoesNotExist();
         if (usdcAmount == 0) revert ZeroAmount();
 
-        // Check $10 cap
         uint256 alreadySpent = userSpent[dishId][msg.sender];
         uint256 remainingAllowance = MAX_SPEND_PER_DISH > alreadySpent
             ? MAX_SPEND_PER_DISH - alreadySpent
@@ -172,17 +132,8 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
 
         if (usdcAmount > remainingAllowance) revert ExceedsMaxSpend();
 
-        // Validate referrer (must hold tokens or be creator, or zero address)
-        if (referrer != address(0)) {
-            if (_balances[dishId][referrer] == 0 && referrer != dish.creator) {
-                revert InvalidReferrer();
-            }
-        }
-
-        // Update rewards for existing holders BEFORE changing supply
         _updateRewardsOnMint(dishId, msg.sender);
 
-        // Calculate tokens to mint based on bonding curve
         (uint256 tokenAmount, uint256 actualCost) = BondingCurve.getTokensForUsdc(
             dish.totalSupply,
             usdcAmount
@@ -190,39 +141,29 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
 
         if (tokenAmount == 0) revert ZeroAmount();
 
-        // Calculate fees
         (uint256 referralFee, uint256 rewardFee, ) = BondingCurve.calculateFees(actualCost);
 
-        // Transfer USDC from user
         if (!usdc.transferFrom(msg.sender, address(this), actualCost)) {
             revert TransferFailed();
         }
 
-        // Distribute referral fee
         address feeRecipient = referrer != address(0) ? referrer : protocolFeeRecipient;
         if (!usdc.transfer(feeRecipient, referralFee)) {
             revert TransferFailed();
         }
 
-        // Add to reward pool and distribute to existing holders
         if (dish.totalSupply > 0) {
-            // Distribute reward fee proportionally to all existing holders
-            // rewardFee stays in contract, tracked via rewardPerTokenStored
             uint256 rewardPerToken = (rewardFee * REWARD_PRECISION) / dish.totalSupply;
             rewardPerTokenStored[dishId] += rewardPerToken;
         } else {
-            // First mint - reward fee goes to protocol
             if (!usdc.transfer(protocolFeeRecipient, rewardFee)) {
                 revert TransferFailed();
             }
         }
 
-        // Update state
         userSpent[dishId][msg.sender] += actualCost;
         dish.totalSupply += tokenAmount;
-        // Note: _balances is updated in _update() override when _mint is called
 
-        // Mint ERC1155 tokens
         _mint(msg.sender, uint256(dishId), tokenAmount, "");
 
         emit DishMinted(
@@ -247,20 +188,14 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
         if (tokenAmount == 0) revert ZeroAmount();
         if (_balances[dishId][msg.sender] < tokenAmount) revert InsufficientBalance();
 
-        // Update rewards before changing balance
         _updateRewards(dishId, msg.sender);
 
-        // Calculate refund (70% of current value)
         uint256 refundAmount = BondingCurve.getSellValue(dish.totalSupply, tokenAmount);
 
-        // Update state
         dish.totalSupply -= tokenAmount;
-        // Note: _balances is updated in _update() override when _burn is called
 
-        // Burn ERC1155 tokens
         _burn(msg.sender, uint256(dishId), tokenAmount);
 
-        // Transfer USDC refund
         if (!usdc.transfer(msg.sender, refundAmount)) {
             revert TransferFailed();
         }
@@ -286,8 +221,6 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
 
         emit RewardsClaimed(dishId, msg.sender, reward);
     }
-
-    // ============ View Functions ============
 
     /**
      * @notice Get the current price for the next token of a dish
@@ -406,14 +339,8 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
     function getMarketCap(bytes32 dishId) external view returns (uint256) {
         uint256 supply = dishes[dishId].totalSupply;
         if (supply == 0) return 0;
-
-        // Market cap = sum of all token values at current price
-        // Using arithmetic series: sum = n * (first + last) / 2
-        // First token value = 1 * SLOPE, Last = supply * SLOPE
         return BondingCurve.getMintCost(0, supply);
     }
-
-    // ============ Admin Functions ============
 
     /**
      * @notice Update the protocol fee recipient
@@ -438,8 +365,6 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
         );
         dish.metadata = newMetadata;
     }
-
-    // ============ Internal Functions ============
 
     /**
      * @notice Update rewards for a user before balance changes
@@ -466,7 +391,6 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
      * @param user The user minting
      */
     function _updateRewardsOnMint(bytes32 dishId, address user) internal {
-        // If user already has balance, calculate their pending rewards first
         uint256 balance = _balances[dishId][user];
         uint256 rewardPerToken = rewardPerTokenStored[dishId];
         uint256 userPaid = userRewardPerTokenPaid[dishId][user];
@@ -476,8 +400,6 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
             pendingRewards[dishId][user] += newRewards;
         }
 
-        // Set checkpoint to current (will be updated after mint adds to rewardPerTokenStored)
-        // This is set before the supply increase, so new tokens won't earn from this mint
         userRewardPerTokenPaid[dishId][user] = rewardPerToken;
     }
 
@@ -490,7 +412,6 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
         uint256[] memory ids,
         uint256[] memory values
     ) internal virtual override {
-        // Update rewards before transfer
         for (uint256 i = 0; i < ids.length; i++) {
             bytes32 dishId = bytes32(ids[i]);
 
