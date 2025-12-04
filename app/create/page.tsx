@@ -6,17 +6,17 @@ import { BottomNav } from "@/app/components/layout/BottomNav";
 import { getCurrentPosition, isWithinRange } from "@/lib/geo";
 import getFid from "@/app/providers/Fid";
 import { Fid, Restaurant } from "@/app/interface";
+import { useFarcaster } from "@/app/providers/FarcasterProvider";
+import { zeroAddress, type Hex } from "viem";
 import {
-  useAccount,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-  useReadContract,
-} from "wagmi";
-import { zeroAddress } from "viem";
+  useFarcasterTransaction,
+  encodeApprove,
+  encodeCreateDish,
+  encodeMint,
+  checkAllowance,
+} from "@/lib/useFarcasterTransaction";
 import {
-  TMAP_DISHES_ABI,
   TMAP_DISHES_ADDRESS,
-  ERC20_ABI,
   USDC_ADDRESS,
   INITIAL_MINT_AMOUNT,
 } from "@/lib/contracts";
@@ -36,7 +36,7 @@ type CreateStep =
 export default function CreatePage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
-  const { address, isConnected } = useAccount();
+  const { user } = useFarcaster();
 
   // Step 1: Restaurant search
   const [searchQuery, setSearchQuery] = useState("");
@@ -60,8 +60,13 @@ export default function CreatePage() {
   // Step 4: Creating
   const [createStep, setCreateStep] = useState<CreateStep>("idle");
   const [createError, setCreateError] = useState("");
-  const [dishId, setDishId] = useState<`0x${string}` | null>(null);
+  const [dishId, setDishId] = useState<Hex | null>(null);
   const [isNewDish, setIsNewDish] = useState(true);
+  const [txHashes, setTxHashes] = useState<{
+    approve?: Hex;
+    create?: Hex;
+    mint?: Hex;
+  }>({});
 
   // Get user's current location for biased search
   const [userLocation, setUserLocation] = useState<{
@@ -72,57 +77,9 @@ export default function CreatePage() {
   // User's Farcaster FID
   const [userFid, setUserFid] = useState<Fid | undefined>(undefined);
 
-  // Contract write hooks - using writeContractAsync for better control
-  const {
-    writeContractAsync: writeApproveAsync,
-    data: approveHash,
-    isPending: isApprovePending,
-    error: approveError,
-    reset: resetApprove,
-  } = useWriteContract();
-
-  const {
-    writeContractAsync: writeCreateDishAsync,
-    data: createDishHash,
-    isPending: isCreatePending,
-    error: createDishError,
-    reset: resetCreate,
-  } = useWriteContract();
-
-  const {
-    writeContractAsync: writeMintAsync,
-    data: mintHash,
-    isPending: isMintPending,
-    error: mintError,
-    reset: resetMint,
-  } = useWriteContract();
-
-  // Wait for transaction receipts
-  const { isSuccess: isApproveSuccess, isError: isApproveError } =
-    useWaitForTransactionReceipt({
-      hash: approveHash,
-    });
-
-  const { isSuccess: isCreateSuccess, isError: isCreateError } =
-    useWaitForTransactionReceipt({
-      hash: createDishHash,
-    });
-
-  const { isSuccess: isMintSuccess, isError: isMintError } =
-    useWaitForTransactionReceipt({
-      hash: mintHash,
-    });
-
-  // Check USDC allowance
-  const { data: allowance, refetch: refetchAllowance } = useReadContract({
-    address: USDC_ADDRESS,
-    abi: ERC20_ABI,
-    functionName: "allowance",
-    args:
-      address && TMAP_DISHES_ADDRESS
-        ? [address, TMAP_DISHES_ADDRESS]
-        : undefined,
-  });
+  // Use Farcaster transaction hook
+  const { sendTransaction, waitForTransaction, isLoading } =
+    useFarcasterTransaction();
 
   useEffect(() => {
     // Get user's Farcaster FID on mount
@@ -143,128 +100,23 @@ export default function CreatePage() {
       });
   }, []);
 
-  // Handle approval confirmation -> proceed to next step
-  useEffect(() => {
-    if (isApproveSuccess && createStep === "waitingApproval" && dishId) {
-      console.log("Approval confirmed, proceeding...");
-      refetchAllowance(); // Refresh allowance
-      if (isNewDish) {
-        proceedToCreateDish();
-      } else {
-        proceedToMint();
-      }
-    }
-    if (isApproveError && createStep === "waitingApproval") {
-      setCreateError("Approval transaction failed");
-      setCreateStep("idle");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isApproveSuccess, isApproveError, createStep, dishId, isNewDish]);
+  // Check if dish exists in database
+  const checkDishExists = async (
+    restaurantName: string,
+    dishName: string
+  ): Promise<{ exists: boolean; dishId: string }> => {
+    const params = new URLSearchParams({
+      restaurantName,
+      dishName,
+    });
 
-  // Handle create dish confirmation -> proceed to mint
-  useEffect(() => {
-    if (isCreateSuccess && createStep === "waitingCreate" && dishId) {
-      console.log("Create dish confirmed, proceeding to mint...");
-      proceedToMint();
-    }
-    if (isCreateError && createStep === "waitingCreate") {
-      setCreateError("Create dish transaction failed");
-      setCreateStep("idle");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCreateSuccess, isCreateError, createStep, dishId]);
+    const res = await fetch(`/api/dish/create?${params}`);
+    const data = await res.json();
 
-  // Handle mint confirmation -> save to database
-  useEffect(() => {
-    if (isMintSuccess && createStep === "waitingMint") {
-      console.log("Mint confirmed, saving to database...");
-      setCreateStep("saving");
-      saveToDatabase();
-    }
-    if (isMintError && createStep === "waitingMint") {
-      setCreateError("Mint transaction failed");
-      setCreateStep("idle");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMintSuccess, isMintError, createStep]);
-
-  // Handle errors from write calls
-  useEffect(() => {
-    if (approveError) {
-      console.error("Approve error:", approveError);
-      setCreateError(approveError.message);
-      setCreateStep("idle");
-    }
-    if (createDishError) {
-      console.error("Create dish error:", createDishError);
-      setCreateError(createDishError.message);
-      setCreateStep("idle");
-    }
-    if (mintError) {
-      console.error("Mint error:", mintError);
-      setCreateError(mintError.message);
-      setCreateStep("idle");
-    }
-  }, [approveError, createDishError, mintError]);
-
-  // Proceed to create dish on chain
-  const proceedToCreateDish = async () => {
-    if (!dishId || !selectedRestaurant) return;
-
-    try {
-      setCreateStep("creating");
-      console.log("Creating dish on chain...", dishId);
-
-      const metadata = JSON.stringify({
-        name: dishName.trim(),
-        description: dishDescription.trim() || "",
-        restaurant: selectedRestaurant.name,
-        restaurantId: selectedRestaurant.id,
-        creator: userFid,
-      });
-
-      await writeCreateDishAsync({
-        address: TMAP_DISHES_ADDRESS,
-        abi: TMAP_DISHES_ABI,
-        functionName: "createDish",
-        args: [dishId, metadata],
-      });
-
-      console.log("Create dish tx submitted, waiting for confirmation...");
-      setCreateStep("waitingCreate");
-    } catch (error) {
-      console.error("Failed to create dish:", error);
-      setCreateError(
-        error instanceof Error ? error.message : "Failed to create dish"
-      );
-      setCreateStep("idle");
-    }
-  };
-
-  // Proceed to mint tokens
-  const proceedToMint = async () => {
-    if (!dishId) return;
-
-    try {
-      setCreateStep("minting");
-      console.log("Minting tokens...", dishId);
-
-      await writeMintAsync({
-        address: TMAP_DISHES_ADDRESS,
-        abi: TMAP_DISHES_ABI,
-        functionName: "mint",
-        args: [dishId, INITIAL_MINT_AMOUNT, zeroAddress],
-      });
-
-      console.log("Mint tx submitted, waiting for confirmation...");
-      setCreateStep("waitingMint");
-    } catch (error) {
-      console.error("Failed to mint:", error);
-      setCreateError(
-        error instanceof Error ? error.message : "Failed to mint tokens"
-      );
-      setCreateStep("idle");
-    }
+    return {
+      exists: data.exists || false,
+      dishId: data.dishId,
+    };
   };
 
   // Save to database
@@ -287,8 +139,8 @@ export default function CreatePage() {
           restaurantLatitude: selectedRestaurant.latitude,
           restaurantLongitude: selectedRestaurant.longitude,
           creatorFid: userFid,
-          createTxHash: createDishHash,
-          mintTxHash: mintHash,
+          createTxHash: txHashes.create,
+          mintTxHash: txHashes.mint,
         }),
       });
 
@@ -310,25 +162,6 @@ export default function CreatePage() {
     }
   };
 
-  // Check if dish exists in database
-  const checkDishExists = async (
-    restaurantName: string,
-    dishName: string
-  ): Promise<{ exists: boolean; dishId: string }> => {
-    const params = new URLSearchParams({
-      restaurantName,
-      dishName,
-    });
-
-    const res = await fetch(`/api/dish/create?${params}`);
-    const data = await res.json();
-
-    return {
-      exists: data.exists || false,
-      dishId: data.dishId,
-    };
-  };
-
   // Main create/mint dish handler
   const handleCreateDish = async () => {
     if (!selectedRestaurant || !dishName.trim()) return;
@@ -338,7 +171,7 @@ export default function CreatePage() {
       return;
     }
 
-    if (!isConnected || !address) {
+    if (!user?.walletAddress) {
       setCreateError("Please connect your wallet first.");
       return;
     }
@@ -348,11 +181,8 @@ export default function CreatePage() {
       return;
     }
 
-    // Reset any previous errors and transaction states
     setCreateError("");
-    resetApprove();
-    resetCreate();
-    resetMint();
+    setTxHashes({});
     setCreateStep("checking");
 
     try {
@@ -363,54 +193,120 @@ export default function CreatePage() {
         dishName
       );
 
-      const targetDishId = existingDishId as `0x${string}`;
+      const targetDishId = existingDishId as Hex;
       setDishId(targetDishId);
       setIsNewDish(!exists);
       console.log("Dish exists:", exists, "DishId:", targetDishId);
 
       // Step 2: Check if we need to approve USDC
-      await refetchAllowance();
-      const currentAllowance = allowance as bigint | undefined;
-      const needsApproval =
-        !currentAllowance || currentAllowance < INITIAL_MINT_AMOUNT;
+      const currentAllowance = await checkAllowance(
+        USDC_ADDRESS,
+        user.walletAddress as Hex,
+        TMAP_DISHES_ADDRESS
+      );
+      const needsApproval = currentAllowance < INITIAL_MINT_AMOUNT;
       console.log(
         "Current allowance:",
-        currentAllowance?.toString(),
+        currentAllowance.toString(),
         "Needs approval:",
         needsApproval
       );
 
+      // Step 3: Approve USDC if needed
       if (needsApproval) {
-        // Start with approval
         setCreateStep("approving");
         console.log("Requesting USDC approval...");
 
-        try {
-          await writeApproveAsync({
-            address: USDC_ADDRESS,
-            abi: ERC20_ABI,
-            functionName: "approve",
-            args: [TMAP_DISHES_ADDRESS, INITIAL_MINT_AMOUNT * BigInt(100)],
-          });
-          console.log("Approval tx submitted, waiting for confirmation...");
-          setCreateStep("waitingApproval");
-        } catch (error) {
-          console.error("Approval failed:", error);
-          setCreateError(
-            error instanceof Error ? error.message : "Approval failed"
-          );
-          setCreateStep("idle");
+        const approveData = encodeApprove(
+          TMAP_DISHES_ADDRESS,
+          INITIAL_MINT_AMOUNT * BigInt(100) // Approve extra for future mints
+        );
+
+        const approveTxHash = await sendTransaction({
+          to: USDC_ADDRESS,
+          data: approveData,
+        });
+
+        setTxHashes((prev) => ({ ...prev, approve: approveTxHash }));
+        console.log("Approval tx hash:", approveTxHash);
+
+        setCreateStep("waitingApproval");
+        const approveSuccess = await waitForTransaction(approveTxHash);
+
+        if (!approveSuccess) {
+          throw new Error("Approval transaction failed");
         }
-      } else if (exists) {
-        // Dish exists and already approved, go straight to mint
-        await proceedToMint();
-      } else {
-        // New dish and already approved, go to createDish
-        await proceedToCreateDish();
+        console.log("Approval confirmed!");
       }
+
+      // Step 4: Create dish if new
+      if (!exists) {
+        setCreateStep("creating");
+        console.log("Creating dish on chain...", targetDishId);
+
+        const metadata = JSON.stringify({
+          name: dishName.trim(),
+          description: dishDescription.trim() || "",
+          restaurant: selectedRestaurant.name,
+          restaurantId: selectedRestaurant.id,
+          creator: userFid,
+        });
+
+        const createData = encodeCreateDish(targetDishId, metadata);
+
+        const createTxHash = await sendTransaction({
+          to: TMAP_DISHES_ADDRESS,
+          data: createData,
+        });
+
+        setTxHashes((prev) => ({ ...prev, create: createTxHash }));
+        console.log("Create dish tx hash:", createTxHash);
+
+        setCreateStep("waitingCreate");
+        const createSuccess = await waitForTransaction(createTxHash);
+
+        if (!createSuccess) {
+          throw new Error("Create dish transaction failed");
+        }
+        console.log("Dish created!");
+      }
+
+      // Step 5: Mint tokens
+      setCreateStep("minting");
+      console.log("Minting tokens...", targetDishId);
+
+      const mintData = encodeMint(
+        targetDishId,
+        INITIAL_MINT_AMOUNT,
+        zeroAddress
+      );
+
+      const mintTxHash = await sendTransaction({
+        to: TMAP_DISHES_ADDRESS,
+        data: mintData,
+      });
+
+      setTxHashes((prev) => ({ ...prev, mint: mintTxHash }));
+      console.log("Mint tx hash:", mintTxHash);
+
+      setCreateStep("waitingMint");
+      const mintSuccess = await waitForTransaction(mintTxHash);
+
+      if (!mintSuccess) {
+        throw new Error("Mint transaction failed");
+      }
+      console.log("Tokens minted!");
+
+      // Step 6: Save to database
+      setCreateStep("saving");
+      await saveToDatabase();
     } catch (err) {
       console.error("Error in handleCreateDish:", err);
-      setCreateError("Failed to check dish status. Please try again.");
+      setCreateError(
+        err instanceof Error
+          ? err.message
+          : "Transaction failed. Please try again."
+      );
       setCreateStep("idle");
     }
   };
@@ -1045,12 +941,7 @@ export default function CreatePage() {
 
             <button
               onClick={handleCreateDish}
-              disabled={
-                isCreating ||
-                isApprovePending ||
-                isCreatePending ||
-                isMintPending
-              }
+              disabled={isCreating || isLoading}
               className="w-full btn-primary disabled:opacity-60 font-semibold py-4 rounded-xl flex items-center justify-center gap-2"
             >
               {isCreating ? (
