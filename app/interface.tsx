@@ -1,4 +1,4 @@
-export type DishAddress = string;
+export type DishId = string;
 export type RestaurantId = string;
 export type Fid = number;
 
@@ -9,7 +9,7 @@ export interface User {
   walletAddress: string;
   portfolio: Portfolio;
   reputationScore: number;
-  wishList: { dish: DishAddress; referrer: Fid }[];
+  wishList: { dish: DishId; referrer: Fid }[];
 }
 
 export interface Portfolio {
@@ -17,7 +17,7 @@ export interface Portfolio {
   totalReturn: number;
   totalInvested: number;
   dishes: {
-    dish: DishAddress;
+    dish: DishId;
     quantity: number;
     return: number;
     referredBy: Fid | null;
@@ -37,7 +37,7 @@ export interface Restaurant {
 }
 
 export interface Dish {
-  tokenAdrress: DishAddress;
+  dishId: DishId;
   startingPrice: number;
   currentPrice: number;
   dailyPriceChange: number;

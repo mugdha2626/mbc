@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { Dish, DishAddress, Fid, RestaurantId } from "@/app/interface";
+import { Dish, DishId, Fid, RestaurantId } from "@/app/interface";
+import { keccak256, toBytes } from "viem";
 
 // Extended Dish type for database storage (includes extra fields)
 interface DishDocument extends Dish {
@@ -22,13 +23,24 @@ interface CreateDishRequest {
   restaurantLatitude: number;
   restaurantLongitude: number;
   creatorFid: Fid;
+  // Transaction hashes from frontend contract calls
+  createTxHash?: string;
+  mintTxHash?: string;
 }
 
-// Generate a unique token address
-function generateTokenAddress(): DishAddress {
-  const timestamp = Date.now().toString(36);
-  const randomPart = Math.random().toString(36).substring(2, 15);
-  return `0x${timestamp}${randomPart}`.toLowerCase();
+/**
+ * Generate a unique dishId by hashing the restaurant name and dish name
+ * This creates a bytes32 hash that matches the contract's dishId format
+ */
+export function generateDishId(
+  restaurantName: string,
+  dishName: string
+): DishId {
+  // Create a unique identifier by hashing restaurant name + dish name
+  const combined = `${restaurantName.toLowerCase().trim()}:${dishName
+    .toLowerCase()
+    .trim()}`;
+  return keccak256(toBytes(combined));
 }
 
 export async function POST(request: NextRequest) {
@@ -59,10 +71,12 @@ export async function POST(request: NextRequest) {
 
     const db = await getDb();
 
+    // Generate unique dishId using restaurant name and dish name
+    const dishId = generateDishId(body.restaurantName, body.name);
+
     // Check if dish already exists at this restaurant with same name
     const existingDish = await db.collection("dishes").findOne({
-      name: body.name.trim(),
-      restaurant: body.restaurantId,
+      dishId: dishId,
     });
 
     if (existingDish) {
@@ -78,7 +92,7 @@ export async function POST(request: NextRequest) {
     // Create the dish document
     const now = new Date();
     const dish: DishDocument = {
-      tokenAdrress: generateTokenAddress(),
+      dishId: dishId,
       name: body.name.trim(),
       description: body.description?.trim() || undefined,
       image: body.image || undefined,
@@ -112,7 +126,7 @@ export async function POST(request: NextRequest) {
         latitude: body.restaurantLatitude,
         longitude: body.restaurantLongitude,
         image: "",
-        dishes: [dish.tokenAdrress],
+        dishes: [dish.dishId],
         tmapRating: 0,
         createdAt: now,
         updatedAt: now,
@@ -122,7 +136,7 @@ export async function POST(request: NextRequest) {
       await db.collection("restaurants").updateOne(
         { id: body.restaurantId },
         {
-          $addToSet: { dishes: dish.tokenAdrress },
+          $addToSet: { dishes: dish.dishId },
           $set: { updatedAt: now },
         }
       );
@@ -134,7 +148,7 @@ export async function POST(request: NextRequest) {
       {
         $addToSet: {
           "portfolio.dishes": {
-            dish: dish.tokenAdrress,
+            dish: dish.dishId,
             quantity: 0,
             return: 0,
             referredBy: null,
@@ -152,6 +166,8 @@ export async function POST(request: NextRequest) {
           ...dish,
           _id: result.insertedId.toString(),
         },
+        createTxHash: body.createTxHash,
+        mintTxHash: body.mintTxHash,
       },
       { status: 201 }
     );
@@ -162,4 +178,22 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// GET endpoint to generate dishId without creating (for frontend to use before contract call)
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const restaurantName = searchParams.get("restaurantName");
+  const dishName = searchParams.get("dishName");
+
+  if (!restaurantName || !dishName) {
+    return NextResponse.json(
+      { error: "restaurantName and dishName are required" },
+      { status: 400 }
+    );
+  }
+
+  const dishId = generateDishId(restaurantName, dishName);
+
+  return NextResponse.json({ dishId });
 }
