@@ -42,17 +42,25 @@ export async function findUserByFid(fid: number): Promise<User | null> {
 export async function upsertUser(
   fid: number,
   username: string,
-  walletAddress: string
+  walletAddress: string,
+  pfpUrl?: string,
+  displayName?: string
 ): Promise<User> {
   const db = await getDb();
+
+  const setFields: Record<string, unknown> = {
+    username,
+    walletAddress,
+  };
+
+  // Only update pfpUrl and displayName if provided
+  if (pfpUrl) setFields.pfpUrl = pfpUrl;
+  if (displayName) setFields.displayName = displayName;
 
   const result = await db.collection<User>(COLLECTION).findOneAndUpdate(
     { fid },
     {
-      $set: {
-        username,
-        walletAddress,
-      },
+      $set: setFields,
       $setOnInsert: {
         fid,
         badges: [],

@@ -49,11 +49,14 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    // Search users by username
+    // Search users by username or displayName
     const users = await db
       .collection("users")
       .find({
-        username: searchRegex,
+        $or: [
+          { username: searchRegex },
+          { displayName: searchRegex },
+        ],
       })
       .limit(5)
       .toArray();
