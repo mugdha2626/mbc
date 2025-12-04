@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed": "npx tsx scripts/seed.ts"
+    "seed": "npx tsx scripts/seed.ts",
+    "db:indexes": "npx tsx scripts/create-indexes.ts"
   },
   "dependencies": {
     "@farcaster/miniapp-sdk": "^0.2.1",
