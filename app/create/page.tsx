@@ -6,10 +6,34 @@ import { BottomNav } from "@/app/components/layout/BottomNav";
 import { getCurrentPosition, isWithinRange } from "@/lib/geo";
 import getFid from "@/app/providers/Fid";
 import { Fid, Restaurant } from "@/app/interface";
+import {
+  useAccount,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+  useReadContract,
+} from "wagmi";
+import { zeroAddress } from "viem";
+import {
+  TMAP_DISHES_ABI,
+  TMAP_DISHES_ADDRESS,
+  ERC20_ABI,
+  USDC_ADDRESS,
+  INITIAL_MINT_AMOUNT,
+} from "@/lib/contracts";
+
+type CreateStep =
+  | "idle"
+  | "checking"
+  | "approving"
+  | "creating"
+  | "minting"
+  | "saving"
+  | "complete";
 
 export default function CreatePage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
+  const { address, isConnected } = useAccount();
 
   // Step 1: Restaurant search
   const [searchQuery, setSearchQuery] = useState("");
@@ -31,8 +55,10 @@ export default function CreatePage() {
   const [dishDescription, setDishDescription] = useState("");
 
   // Step 4: Creating
-  const [isCreating, setIsCreating] = useState(false);
+  const [createStep, setCreateStep] = useState<CreateStep>("idle");
   const [createError, setCreateError] = useState("");
+  const [dishId, setDishId] = useState<`0x${string}` | null>(null);
+  const [isNewDish, setIsNewDish] = useState(true); // Track if dish is new or existing
 
   // Get user's current location for biased search
   const [userLocation, setUserLocation] = useState<{
@@ -42,6 +68,52 @@ export default function CreatePage() {
 
   // User's Farcaster FID
   const [userFid, setUserFid] = useState<Fid | undefined>(undefined);
+
+  // Contract write hooks
+  const {
+    writeContract: writeApprove,
+    data: approveHash,
+    isPending: isApprovePending,
+    error: approveError,
+  } = useWriteContract();
+
+  const {
+    writeContract: writeCreateDish,
+    data: createDishHash,
+    isPending: isCreatePending,
+    error: createDishError,
+  } = useWriteContract();
+
+  const {
+    writeContract: writeMint,
+    data: mintHash,
+    isPending: isMintPending,
+    error: mintError,
+  } = useWriteContract();
+
+  // Wait for transaction receipts
+  const { isSuccess: isApproveSuccess } = useWaitForTransactionReceipt({
+    hash: approveHash,
+  });
+
+  const { isSuccess: isCreateSuccess } = useWaitForTransactionReceipt({
+    hash: createDishHash,
+  });
+
+  const { isSuccess: isMintSuccess } = useWaitForTransactionReceipt({
+    hash: mintHash,
+  });
+
+  // Check USDC allowance
+  const { data: allowance } = useReadContract({
+    address: USDC_ADDRESS,
+    abi: ERC20_ABI,
+    functionName: "allowance",
+    args:
+      address && TMAP_DISHES_ADDRESS
+        ? [address, TMAP_DISHES_ADDRESS]
+        : undefined,
+  });
 
   useEffect(() => {
     // Get user's Farcaster FID on mount
@@ -61,6 +133,229 @@ export default function CreatePage() {
         // Ignore - location is optional for search
       });
   }, []);
+
+  // Handle approval success -> create dish or mint (depending on isNewDish)
+  useEffect(() => {
+    if (isApproveSuccess && createStep === "approving" && dishId) {
+      if (isNewDish) {
+        setCreateStep("creating");
+        createDishOnChain();
+      } else {
+        // Existing dish - skip create, go straight to mint
+        setCreateStep("minting");
+        mintTokens();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isApproveSuccess, createStep, dishId, isNewDish]);
+
+  // Handle create dish success -> mint
+  useEffect(() => {
+    if (isCreateSuccess && createStep === "creating" && dishId) {
+      setCreateStep("minting");
+      mintTokens();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCreateSuccess, createStep, dishId]);
+
+  // Handle mint success -> save to database
+  useEffect(() => {
+    if (isMintSuccess && createStep === "minting") {
+      setCreateStep("saving");
+      saveToDatabase();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMintSuccess, createStep]);
+
+  // Handle errors
+  useEffect(() => {
+    if (approveError) {
+      setCreateError(approveError.message);
+      setCreateStep("idle");
+    }
+    if (createDishError) {
+      setCreateError(createDishError.message);
+      setCreateStep("idle");
+    }
+    if (mintError) {
+      setCreateError(mintError.message);
+      setCreateStep("idle");
+    }
+  }, [approveError, createDishError, mintError]);
+
+  // Create dish on chain (only for new dishes)
+  const createDishOnChain = () => {
+    if (!dishId || !selectedRestaurant) return;
+
+    const metadata = JSON.stringify({
+      name: dishName.trim(),
+      description: dishDescription.trim() || "",
+      restaurant: selectedRestaurant.name,
+      restaurantId: selectedRestaurant.id,
+      creator: userFid,
+    });
+
+    writeCreateDish({
+      address: TMAP_DISHES_ADDRESS,
+      abi: TMAP_DISHES_ABI,
+      functionName: "createDish",
+      args: [dishId, metadata],
+    });
+  };
+
+  // Mint tokens (works for both new and existing dishes)
+  const mintTokens = () => {
+    if (!dishId) return;
+
+    writeMint({
+      address: TMAP_DISHES_ADDRESS,
+      abi: TMAP_DISHES_ABI,
+      functionName: "mint",
+      args: [dishId, INITIAL_MINT_AMOUNT, zeroAddress],
+    });
+  };
+
+  // Save to database
+  const saveToDatabase = async () => {
+    if (!selectedRestaurant || !userFid || !dishId) return;
+
+    try {
+      const res = await fetch("/api/dish/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          dishId: dishId,
+          name: dishName.trim(),
+          description: dishDescription.trim() || undefined,
+          restaurantId: selectedRestaurant.id,
+          restaurantName: selectedRestaurant.name,
+          restaurantAddress: selectedRestaurant.address,
+          restaurantLatitude: selectedRestaurant.latitude,
+          restaurantLongitude: selectedRestaurant.longitude,
+          creatorFid: userFid,
+          createTxHash: createDishHash,
+          mintTxHash: mintHash,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save dish");
+      }
+
+      setCreateStep("complete");
+      // Success - navigate to dish page
+      router.push(`/dish/${dishId}`);
+    } catch (err) {
+      console.error("Failed to save dish:", err);
+      setCreateError(
+        err instanceof Error ? err.message : "Failed to save dish"
+      );
+      setCreateStep("idle");
+    }
+  };
+
+  // Check if dish exists in database
+  const checkDishExists = async (
+    restaurantName: string,
+    dishName: string
+  ): Promise<{ exists: boolean; dishId: string }> => {
+    const params = new URLSearchParams({
+      restaurantName,
+      dishName,
+    });
+
+    const res = await fetch(`/api/dish/create?${params}`);
+    const data = await res.json();
+
+    return {
+      exists: data.exists || false,
+      dishId: data.dishId,
+    };
+  };
+
+  // Main create/mint dish handler
+  const handleCreateDish = async () => {
+    if (!selectedRestaurant || !dishName.trim()) return;
+
+    if (!userFid) {
+      setCreateError("Unable to get your Farcaster ID. Please try again.");
+      return;
+    }
+
+    if (!isConnected || !address) {
+      setCreateError("Please connect your wallet first.");
+      return;
+    }
+
+    if (!TMAP_DISHES_ADDRESS || !USDC_ADDRESS) {
+      setCreateError("Contract addresses not configured.");
+      return;
+    }
+
+    setCreateError("");
+    setCreateStep("checking");
+
+    try {
+      // Step 1: Check if dish already exists
+      const { exists, dishId: existingDishId } = await checkDishExists(
+        selectedRestaurant.name,
+        dishName
+      );
+
+      const targetDishId = existingDishId as `0x${string}`;
+      setDishId(targetDishId);
+      setIsNewDish(!exists);
+
+      // Step 2: Check if we need to approve USDC
+      const currentAllowance = allowance as bigint | undefined;
+      const needsApproval =
+        !currentAllowance || currentAllowance < INITIAL_MINT_AMOUNT;
+
+      if (needsApproval) {
+        setCreateStep("approving");
+        writeApprove({
+          address: USDC_ADDRESS,
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [TMAP_DISHES_ADDRESS, INITIAL_MINT_AMOUNT * BigInt(100)],
+        });
+      } else if (exists) {
+        // Dish exists, skip approval and createDish, go straight to mint
+        setCreateStep("minting");
+        writeMint({
+          address: TMAP_DISHES_ADDRESS,
+          abi: TMAP_DISHES_ABI,
+          functionName: "mint",
+          args: [targetDishId, INITIAL_MINT_AMOUNT, zeroAddress],
+        });
+      } else {
+        // New dish, skip approval, go to createDish
+        setCreateStep("creating");
+        const metadata = JSON.stringify({
+          name: dishName.trim(),
+          description: dishDescription.trim() || "",
+          restaurant: selectedRestaurant.name,
+          restaurantId: selectedRestaurant.id,
+          creator: userFid,
+        });
+
+        writeCreateDish({
+          address: TMAP_DISHES_ADDRESS,
+          abi: TMAP_DISHES_ABI,
+          functionName: "createDish",
+          args: [targetDishId, metadata],
+        });
+      }
+    } catch (err) {
+      console.error("Error checking dish:", err);
+      setCreateError("Failed to check dish status. Please try again.");
+      setCreateStep("idle");
+    }
+  };
 
   // Search restaurants
   const handleSearch = async () => {
@@ -84,54 +379,6 @@ export default function CreatePage() {
       console.error("Search failed:", err);
     } finally {
       setIsSearching(false);
-    }
-  };
-
-  // Create dish token
-  const handleCreateDish = async () => {
-    if (!selectedRestaurant || !dishName.trim()) return;
-
-    if (!userFid) {
-      setCreateError("Unable to get your Farcaster ID. Please try again.");
-      return;
-    }
-
-    setIsCreating(true);
-    setCreateError("");
-
-    try {
-      const res = await fetch("/api/dish/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: dishName.trim(),
-          description: dishDescription.trim() || undefined,
-          restaurantId: selectedRestaurant.id,
-          restaurantName: selectedRestaurant.name,
-          restaurantAddress: selectedRestaurant.address,
-          restaurantLatitude: selectedRestaurant.latitude,
-          restaurantLongitude: selectedRestaurant.longitude,
-          creatorFid: userFid,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to create dish");
-      }
-
-      // Success - navigate to profile or dish page
-      router.push(`/dish/${data.dish.tokenAdrress}`);
-    } catch (err) {
-      console.error("Failed to create dish:", err);
-      setCreateError(
-        err instanceof Error ? err.message : "Failed to create dish"
-      );
-    } finally {
-      setIsCreating(false);
     }
   };
 
@@ -170,6 +417,48 @@ export default function CreatePage() {
       setIsVerifying(false);
     }
   };
+
+  // Get button text based on current step
+  const getButtonText = () => {
+    switch (createStep) {
+      case "checking":
+        return "Checking...";
+      case "approving":
+        return "Approving USDC...";
+      case "creating":
+        return "Creating Dish...";
+      case "minting":
+        return "Minting Tokens...";
+      case "saving":
+        return "Saving...";
+      case "complete":
+        return "Complete!";
+      default:
+        return "Create Token";
+    }
+  };
+
+  // Get progress message
+  const getProgressMessage = () => {
+    switch (createStep) {
+      case "checking":
+        return "Checking if dish exists...";
+      case "approving":
+        return "Approving USDC spending...";
+      case "creating":
+        return "Creating dish on Base Sepolia...";
+      case "minting":
+        return isNewDish
+          ? "Minting initial tokens..."
+          : "Minting tokens to existing dish...";
+      case "saving":
+        return "Saving to database...";
+      default:
+        return "";
+    }
+  };
+
+  const isCreating = createStep !== "idle" && createStep !== "complete";
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -274,7 +563,7 @@ export default function CreatePage() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                   placeholder="Search restaurants..."
-                  className="flex-1 bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--primary-hover)]"
+                  className="flex-1 bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-(--primary-hover)"
                 />
                 <button
                   onClick={handleSearch}
@@ -315,9 +604,9 @@ export default function CreatePage() {
                       setSelectedRestaurant(restaurant);
                       setStep(2);
                     }}
-                    className={`w-full text-left bg-white border rounded-xl p-4 hover:border-[var(--primary-hover)] transition-colors ${
+                    className={`w-full text-left bg-white border rounded-xl p-4 hover:border-(--primary-hover) transition-colors ${
                       selectedRestaurant?.id === restaurant.id
-                        ? "border-[var(--primary-dark)] ring-2 ring-[var(--primary)]"
+                        ? "border-(--primary-dark) ring-2 ring-(--primary)"
                         : "border-gray-200"
                     }`}
                   >
@@ -510,7 +799,7 @@ export default function CreatePage() {
                     value={dishName}
                     onChange={(e) => setDishName(e.target.value)}
                     placeholder="e.g., Truffle Mushroom Risotto"
-                    className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--primary-hover)]"
+                    className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-(--primary-hover)"
                   />
                 </div>
 
@@ -523,7 +812,7 @@ export default function CreatePage() {
                     onChange={(e) => setDishDescription(e.target.value)}
                     placeholder="Describe the dish..."
                     rows={3}
-                    className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--primary-hover)] resize-none"
+                    className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-(--primary-hover) resize-none"
                   />
                 </div>
 
@@ -531,7 +820,7 @@ export default function CreatePage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Dish Photo
                   </label>
-                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-[var(--primary-dark)] transition-colors cursor-pointer">
+                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-(--primary-dark) transition-colors cursor-pointer">
                     <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
                       <svg
                         className="w-6 h-6 text-gray-400"
@@ -589,13 +878,19 @@ export default function CreatePage() {
                   <span className="font-medium text-gray-900">{dishName}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Starting Price</span>
-                  <span className="font-medium text-green-600">$0.10</span>
+                  <span className="text-gray-500">Network</span>
+                  <span className="font-medium text-blue-600">
+                    Base Sepolia
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Mint Amount</span>
+                  <span className="font-medium text-gray-900">$1.00 USDC</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Creator Fee</span>
                   <span className="font-medium text-gray-900">
-                    2% of all trades
+                    2.5% of all trades
                   </span>
                 </div>
               </div>
@@ -617,27 +912,51 @@ export default function CreatePage() {
                     You{"'"}ll be the creator!
                   </p>
                   <p className="text-sm text-gray-600 mt-1">
-                    Earn 2% on all future trades of this token.
+                    Earn 2.5% on all future trades of this token.
                   </p>
                 </div>
               </div>
             </div>
 
+            {/* Transaction Progress */}
+            {isCreating && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+                  <div>
+                    <p className="font-medium text-blue-800">
+                      {getProgressMessage()}
+                    </p>
+                    {createStep !== "checking" && createStep !== "saving" && (
+                      <p className="text-sm text-blue-600 mt-1">
+                        Please confirm the transaction in your wallet
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {createError && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
-                <p className="text-red-700">{createError}</p>
+                <p className="text-red-700 text-sm">{createError}</p>
               </div>
             )}
 
             <button
               onClick={handleCreateDish}
-              disabled={isCreating}
+              disabled={
+                isCreating ||
+                isApprovePending ||
+                isCreatePending ||
+                isMintPending
+              }
               className="w-full btn-primary disabled:opacity-60 font-semibold py-4 rounded-xl flex items-center justify-center gap-2"
             >
               {isCreating ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Creating...
+                  {getButtonText()}
                 </>
               ) : (
                 "Create Token"

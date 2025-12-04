@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { Dish, DishAddress, Fid, RestaurantId } from "@/app/interface";
+import { Dish, DishId, Fid, RestaurantId } from "@/app/interface";
+import { keccak256, toBytes } from "viem";
 
 // Extended Dish type for database storage (includes extra fields)
 interface DishDocument extends Dish {
@@ -11,8 +12,8 @@ interface DishDocument extends Dish {
   updatedAt: Date;
 }
 
-// Request body type
-interface CreateDishRequest {
+// Request body type for checking/preparing a dish
+interface PrepareDishRequest {
   name: string;
   description?: string;
   image?: string;
@@ -24,16 +25,69 @@ interface CreateDishRequest {
   creatorFid: Fid;
 }
 
-// Generate a unique token address
-function generateTokenAddress(): DishAddress {
-  const timestamp = Date.now().toString(36);
-  const randomPart = Math.random().toString(36).substring(2, 15);
-  return `0x${timestamp}${randomPart}`.toLowerCase();
+// Request body for saving after contract creation
+interface SaveDishRequest extends PrepareDishRequest {
+  dishId: DishId;
+  createTxHash?: string;
+  mintTxHash?: string;
 }
 
+/**
+ * Generate a unique dishId by hashing the restaurant name and dish name
+ * This creates a bytes32 hash that matches the contract's dishId format
+ */
+export function generateDishId(
+  restaurantName: string,
+  dishName: string
+): DishId {
+  const combined = `${restaurantName.toLowerCase().trim()}:${dishName
+    .toLowerCase()
+    .trim()}`;
+  return keccak256(toBytes(combined));
+}
+
+/**
+ * GET - Check if dish exists and get dishId
+ * Returns: { exists: boolean, dishId: string, dish?: DishDocument }
+ */
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const restaurantName = searchParams.get("restaurantName");
+  const dishName = searchParams.get("dishName");
+
+  if (!restaurantName || !dishName) {
+    return NextResponse.json(
+      { error: "restaurantName and dishName are required" },
+      { status: 400 }
+    );
+  }
+
+  const dishId = generateDishId(restaurantName, dishName);
+  const db = await getDb();
+
+  // Check if dish exists in database
+  const existingDish = await db.collection("dishes").findOne({ dishId });
+
+  if (existingDish) {
+    return NextResponse.json({
+      exists: true,
+      dishId,
+      dish: existingDish,
+    });
+  }
+
+  return NextResponse.json({
+    exists: false,
+    dishId,
+  });
+}
+
+/**
+ * POST - Save dish to database after contract creation/minting
+ */
 export async function POST(request: NextRequest) {
   try {
-    const body: CreateDishRequest = await request.json();
+    const body: SaveDishRequest = await request.json();
 
     // Validate required fields
     if (!body.name || !body.name.trim()) {
@@ -57,33 +111,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const db = await getDb();
-
-    // Check if dish already exists at this restaurant with same name
-    const existingDish = await db.collection("dishes").findOne({
-      name: body.name.trim(),
-      restaurant: body.restaurantId,
-    });
-
-    if (existingDish) {
+    if (!body.dishId) {
       return NextResponse.json(
-        { error: "A dish with this name already exists at this restaurant" },
-        { status: 409 }
+        { error: "Dish ID is required" },
+        { status: 400 }
       );
     }
 
-    // Initial token economics
-    const startingPrice = 0.1; // $0.10
+    const db = await getDb();
 
-    // Create the dish document
+    // Check if dish already exists
+    const existingDish = await db.collection("dishes").findOne({
+      dishId: body.dishId,
+    });
+
+    if (existingDish) {
+      // Dish already exists - just return it (minting was done on existing dish)
+      return NextResponse.json({
+        success: true,
+        dish: existingDish,
+        isNew: false,
+      });
+    }
+
+    // Create new dish document
     const now = new Date();
     const dish: DishDocument = {
-      tokenAdrress: generateTokenAddress(),
+      dishId: body.dishId,
       name: body.name.trim(),
       description: body.description?.trim() || undefined,
       image: body.image || undefined,
-      startingPrice: startingPrice,
-      currentPrice: startingPrice,
+      startingPrice: 0.1,
+      currentPrice: 0.1,
       dailyPriceChange: 0,
       currentSupply: 0,
       totalHolders: 0,
@@ -98,13 +157,12 @@ export async function POST(request: NextRequest) {
     // Insert the dish into the database
     const result = await db.collection("dishes").insertOne(dish);
 
-    // Also ensure the restaurant exists in our database
+    // Ensure the restaurant exists in our database
     const existingRestaurant = await db.collection("restaurants").findOne({
       id: body.restaurantId,
     });
 
     if (!existingRestaurant) {
-      // Create the restaurant entry
       await db.collection("restaurants").insertOne({
         id: body.restaurantId,
         name: body.restaurantName,
@@ -112,29 +170,28 @@ export async function POST(request: NextRequest) {
         latitude: body.restaurantLatitude,
         longitude: body.restaurantLongitude,
         image: "",
-        dishes: [dish.tokenAdrress],
+        dishes: [dish.dishId],
         tmapRating: 0,
         createdAt: now,
         updatedAt: now,
       });
     } else {
-      // Add dish to restaurant's dish list
       await db.collection("restaurants").updateOne(
         { id: body.restaurantId },
         {
-          $addToSet: { dishes: dish.tokenAdrress },
+          $addToSet: { dishes: dish.dishId },
           $set: { updatedAt: now },
         }
       );
     }
 
-    // Update creator's portfolio (if user exists)
+    // Update creator's portfolio
     await db.collection("users").updateOne(
       { fid: body.creatorFid },
       {
         $addToSet: {
           "portfolio.dishes": {
-            dish: dish.tokenAdrress,
+            dish: dish.dishId,
             quantity: 0,
             return: 0,
             referredBy: null,
@@ -152,14 +209,14 @@ export async function POST(request: NextRequest) {
           ...dish,
           _id: result.insertedId.toString(),
         },
+        isNew: true,
+        createTxHash: body.createTxHash,
+        mintTxHash: body.mintTxHash,
       },
       { status: 201 }
     );
   } catch (error) {
-    console.error("Error creating dish:", error);
-    return NextResponse.json(
-      { error: "Failed to create dish" },
-      { status: 500 }
-    );
+    console.error("Error saving dish:", error);
+    return NextResponse.json({ error: "Failed to save dish" }, { status: 500 });
   }
 }

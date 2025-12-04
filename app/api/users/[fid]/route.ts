@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findUserByFid } from "@/lib/db/users";
+import { getDb } from "@/lib/mongodb";
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ fid: string }> }
 ) {
   try {
@@ -13,7 +13,15 @@ export async function GET(
       return NextResponse.json({ error: "Invalid FID" }, { status: 400 });
     }
 
-    const user = await findUserByFid(fidNum);
+    const db = await getDb();
+
+    // Try to find user by fid as number first, then as string (for legacy data)
+    let user = await db.collection("users").findOne({ fid: fidNum });
+
+    if (!user) {
+      // Try as string in case of legacy data
+      user = await db.collection("users").findOne({ fid: fid });
+    }
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });

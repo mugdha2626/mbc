@@ -74,6 +74,8 @@ export function FarcasterProvider({
                 fid: userData.fid,
                 username: userData.username,
                 walletAddress: userData.walletAddress,
+                pfpUrl: userData.pfpUrl,
+                displayName: userData.displayName,
               }),
             });
           } catch (err) {

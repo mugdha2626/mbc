@@ -14,6 +14,7 @@ interface SearchResult {
   lat?: number;
   lng?: number;
   fid?: number;
+  pfpUrl?: string;
 }
 
 interface MapRestaurant {
@@ -125,6 +126,7 @@ export default function Home() {
               type: "user",
               subtitle: `${u.reputationScore} reputation · ${u.portfolio?.dishes?.length || 0} dishes`,
               fid: u.fid,
+              pfpUrl: u.pfpUrl,
             });
           });
         }
@@ -214,24 +216,32 @@ export default function Home() {
                   onClick={() => handleSelectResult(result)}
                   className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors text-left border-b border-gray-50 last:border-0"
                 >
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    result.type === "restaurant" ? "bg-blue-100" :
-                    result.type === "user" ? "bg-purple-100" : "bg-orange-100"
-                  }`}>
-                    {result.type === "restaurant" ? (
-                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                      </svg>
-                    ) : result.type === "user" ? (
-                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                    )}
-                  </div>
+                  {result.type === "user" && result.pfpUrl ? (
+                    <img
+                      src={result.pfpUrl}
+                      alt={result.name}
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                      result.type === "restaurant" ? "bg-blue-100" :
+                      result.type === "user" ? "bg-purple-100" : "bg-orange-100"
+                    }`}>
+                      {result.type === "restaurant" ? (
+                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                      ) : result.type === "user" ? (
+                        <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      )}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 truncate">
                       {result.type === "user" ? `@${result.name}` : result.name}
