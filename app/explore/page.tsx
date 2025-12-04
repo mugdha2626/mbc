@@ -93,7 +93,7 @@ export default function ExplorePage() {
               onClick={() => setActiveFilter(filter.id)}
               className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
                 activeFilter === filter.id
-                  ? "bg-indigo-600 text-white"
+                  ? "btn-primary"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
             >

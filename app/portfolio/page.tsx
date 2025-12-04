@@ -58,25 +58,25 @@ const createdTokens = [
 
 export default function PortfolioPage() {
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white pb-24">
+    <div className="min-h-screen bg-[var(--background)] text-gray-900 pb-24">
       <Header title="Portfolio" />
 
       {/* Portfolio Summary */}
       <div className="px-4 py-6">
-        <div className="bg-gradient-to-br from-purple-600/20 to-purple-900/20 border border-purple-500/30 rounded-2xl p-6">
-          <p className="text-sm text-zinc-400 mb-1">Total Portfolio Value</p>
+        <div className="bg-gradient-to-br from-[var(--primary)] to-[var(--primary-hover)] border border-[var(--primary-dark)]/30 rounded-2xl p-6">
+          <p className="text-sm text-gray-600 mb-1">Total Portfolio Value</p>
           <div className="flex items-end gap-3 mb-4">
-            <span className="text-4xl font-bold">{portfolioStats.totalValue}</span>
+            <span className="text-4xl font-bold text-gray-900">{portfolioStats.totalValue}</span>
             <PriceChange value={portfolioStats.totalChange} size="md" />
           </div>
           <div className="flex gap-6">
             <div>
-              <p className="text-2xl font-semibold">{portfolioStats.tokensOwned}</p>
-              <p className="text-xs text-zinc-500">Tokens Owned</p>
+              <p className="text-2xl font-semibold text-gray-900">{portfolioStats.tokensOwned}</p>
+              <p className="text-xs text-gray-500">Tokens Owned</p>
             </div>
             <div>
-              <p className="text-2xl font-semibold">{portfolioStats.tokensCreated}</p>
-              <p className="text-xs text-zinc-500">Tokens Created</p>
+              <p className="text-2xl font-semibold text-gray-900">{portfolioStats.tokensCreated}</p>
+              <p className="text-xs text-gray-500">Tokens Created</p>
             </div>
           </div>
         </div>
@@ -84,11 +84,11 @@ export default function PortfolioPage() {
 
       {/* Holdings */}
       <div className="px-4 mb-6">
-        <h2 className="text-lg font-semibold mb-3">Your Holdings</h2>
+        <h2 className="text-lg font-semibold mb-3 text-gray-900">Your Holdings</h2>
         <div className="space-y-3">
           {holdings.map((holding) => (
             <Link key={holding.id} href={`/dish/${holding.id}`}>
-              <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 hover:border-zinc-700 transition-colors">
+              <div className="bg-white border border-gray-100 rounded-xl p-4 hover:border-gray-200 transition-colors shadow-sm">
                 <div className="flex gap-4">
                   <img
                     src={holding.image}
@@ -98,15 +98,15 @@ export default function PortfolioPage() {
                   <div className="flex-1">
                     <div className="flex items-start justify-between">
                       <div>
-                        <h3 className="font-medium">{holding.name}</h3>
-                        <p className="text-sm text-zinc-500">{holding.amount} tokens</p>
+                        <h3 className="font-medium text-gray-900">{holding.name}</h3>
+                        <p className="text-sm text-gray-500">{holding.amount} tokens</p>
                       </div>
                       <div className="text-right">
-                        <p className="font-semibold">${holding.value.toFixed(2)}</p>
+                        <p className="font-semibold text-gray-900">${holding.value.toFixed(2)}</p>
                         <PriceChange value={holding.priceChange} size="sm" />
                       </div>
                     </div>
-                    <div className="flex gap-4 mt-2 text-xs text-zinc-500">
+                    <div className="flex gap-4 mt-2 text-xs text-gray-500">
                       <span>Avg: ${holding.avgCost.toFixed(2)}</span>
                       <span>Now: ${holding.currentPrice.toFixed(2)}</span>
                     </div>
@@ -120,11 +120,11 @@ export default function PortfolioPage() {
 
       {/* Created Tokens */}
       <div className="px-4">
-        <h2 className="text-lg font-semibold mb-3">Tokens You Created</h2>
+        <h2 className="text-lg font-semibold mb-3 text-gray-900">Tokens You Created</h2>
         <div className="space-y-3">
           {createdTokens.map((token) => (
             <Link key={token.id} href={`/dish/${token.id}`}>
-              <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 hover:border-zinc-700 transition-colors">
+              <div className="bg-white border border-gray-100 rounded-xl p-4 hover:border-gray-200 transition-colors shadow-sm">
                 <div className="flex gap-4">
                   <div className="relative">
                     <img
@@ -133,18 +133,18 @@ export default function PortfolioPage() {
                       className="w-14 h-14 rounded-lg object-cover"
                     />
                     <div className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center">
-                      <span className="text-xs">👑</span>
+                      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 1L9 9l-8 2 6 5-2 8 7-4 7 4-2-8 6-5-8-2-3-8z"/></svg>
                     </div>
                   </div>
                   <div className="flex-1">
                     <div className="flex items-start justify-between">
                       <div>
-                        <h3 className="font-medium">{token.name}</h3>
-                        <p className="text-sm text-zinc-500">{token.holders} holders</p>
+                        <h3 className="font-medium text-gray-900">{token.name}</h3>
+                        <p className="text-sm text-gray-500">{token.holders} holders</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm text-zinc-400">MC: {token.marketCap}</p>
-                        <p className="text-green-400 font-medium">+{token.earnings}</p>
+                        <p className="text-sm text-gray-500">MC: {token.marketCap}</p>
+                        <p className="text-green-600 font-medium">+{token.earnings}</p>
                       </div>
                     </div>
                   </div>

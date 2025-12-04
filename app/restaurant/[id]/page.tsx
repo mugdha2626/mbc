@@ -87,7 +87,7 @@ export default function RestaurantPage() {
         {restaurant.badge && (
           <div className="absolute top-4 right-16">
             <div className="bg-orange-500 text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
-              <span>🏆</span>
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 15a4 4 0 004-4V4H8v7a4 4 0 004 4zm-6-4V4H4a2 2 0 00-2 2v3a3 3 0 003 3h1v-1zm12 0h1a3 3 0 003-3V6a2 2 0 00-2-2h-2v7zM9 18h6v3H9v-3z"/></svg>
               {restaurant.badge}
             </div>
           </div>
@@ -98,7 +98,7 @@ export default function RestaurantPage() {
           <h1 className="text-2xl font-bold text-white">{restaurant.name}</h1>
           <div className="flex items-center gap-2 mt-1">
             <div className="flex items-center gap-1 text-yellow-400">
-              <span>⭐</span>
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
               <span className="text-white font-medium">{restaurant.rating}</span>
             </div>
             <span className="text-white/60">•</span>
@@ -121,7 +121,7 @@ export default function RestaurantPage() {
 
           {/* Address */}
           <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
-            <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
             </svg>
             <span>{restaurant.address}</span>

@@ -33,31 +33,40 @@ const MarkerIcon = ({ type, count }: { type: MapMarker["type"]; count?: number }
     case "trending":
       return (
         <div className={`${baseClasses} bg-gradient-to-br from-orange-500 to-orange-600 ring-4 ring-orange-500/30`}>
-          <span className="text-xl">🔥</span>
+          <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 23c-3.866 0-7-2.239-7-5 0-1.359.533-2.588 1.394-3.5C5.536 13.06 5 11.612 5 10c0-4.418 3.134-8 7-8s7 3.582 7 8c0 1.612-.536 3.06-1.394 4.5.861.912 1.394 2.141 1.394 3.5 0 2.761-3.134 5-7 5zm0-18c-2.761 0-5 2.686-5 6 0 1.335.428 2.569 1.152 3.548L9.5 16.5l1.293-1.293a1 1 0 011.414 0L13.5 16.5l1.348-1.952C15.572 13.569 16 12.335 16 11c0-3.314-2.239-6-5-6h1z"/>
+          </svg>
         </div>
       );
     case "restaurant":
       return (
-        <div className={`${baseClasses} bg-zinc-800 border-2 border-purple-500`}>
-          <span className="text-white font-bold text-sm">{count}</span>
+        <div className={`${baseClasses} bg-white border-2 border-[var(--primary-dark)]`}>
+          <span className="text-gray-900 font-bold text-sm">{count}</span>
         </div>
       );
     case "trophy":
       return (
-        <div className={`${baseClasses} bg-purple-600`}>
-          <span className="text-xl">🏆</span>
+        <div className={`${baseClasses} btn-primary`}>
+          <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 15a4 4 0 004-4V4H8v7a4 4 0 004 4zm-6-4V4H4a2 2 0 00-2 2v3a3 3 0 003 3h1v-1zm12 0h1a3 3 0 003-3V6a2 2 0 00-2-2h-2v7zM9 18h6v3H9v-3z"/>
+          </svg>
         </div>
       );
     case "chef":
       return (
-        <div className={`${baseClasses} bg-purple-600`}>
-          <span className="text-xl">👨‍🍳</span>
+        <div className={`${baseClasses} btn-primary`}>
+          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513c0 1.135.845 2.098 1.976 2.192 1.327.11 2.669.166 4.024.166 1.355 0 2.697-.056 4.024-.166 1.131-.094 1.976-1.057 1.976-2.192v-2.513c0-1.135-.845-2.098-1.976-2.192A48.424 48.424 0 0012 8.25zm0 0V6m0 2.25a2.25 2.25 0 002.25-2.25V4.5a2.25 2.25 0 00-4.5 0v1.5A2.25 2.25 0 0012 8.25zm0 9.75v1.5m-3-1.5h6"/>
+          </svg>
         </div>
       );
     case "utensils":
       return (
-        <div className={`${baseClasses} bg-zinc-800 border border-zinc-700`}>
-          <span className="text-xl">🍴</span>
+        <div className={`${baseClasses} bg-white border border-gray-200`}>
+          <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513c0 1.135.845 2.098 1.976 2.192 1.327.11 2.669.166 4.024.166 1.355 0 2.697-.056 4.024-.166 1.131-.094 1.976-1.057 1.976-2.192v-2.513c0-1.135-.845-2.098-1.976-2.192A48.424 48.424 0 0012 8.25z"/>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M7 10.5V21m5-10.5V21m5-10.5V21M6 3v4m6-4v4m6-4v4"/>
+          </svg>
         </div>
       );
     default:
@@ -115,7 +124,7 @@ export function MapView({ markers = mockMarkers, onMarkerClick }: MapViewProps) 
 
       {/* Floating action button */}
       <Link href="/dish/new">
-        <div className="absolute bottom-4 right-4 w-14 h-14 bg-purple-600 rounded-full flex items-center justify-center shadow-lg shadow-purple-500/30 hover:bg-purple-500 transition-colors z-30">
+        <div className="absolute bottom-4 right-4 w-14 h-14 btn-primary rounded-full flex items-center justify-center shadow-lg shadow-[var(--primary-dark)]/30 z-30">
           <div className="w-8 h-8 rounded-full bg-white/90" />
         </div>
       </Link>

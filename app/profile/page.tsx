@@ -145,7 +145,7 @@ export default function ProfilePage() {
               </svg>
               REPUTATION
             </div>
-            <p className="text-2xl font-bold text-indigo-600">{userStats.reputation}</p>
+            <p className="text-2xl font-bold text-primary-dark">{userStats.reputation}</p>
             <p className="text-sm text-gray-500">Rank: {userStats.rank}</p>
           </div>
         </div>
@@ -155,12 +155,12 @@ export default function ProfilePage() {
       <div className="px-4 py-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
             </svg>
             <h2 className="text-lg font-semibold text-gray-900">Your Taste Map</h2>
           </div>
-          <span className="text-sm font-medium text-indigo-600">{tasteSpots.length} Spots</span>
+          <span className="text-sm font-medium text-primary-dark">{tasteSpots.length} Spots</span>
         </div>
         <MiniTasteMap spots={tasteSpots} location="New York" />
       </div>

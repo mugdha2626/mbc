@@ -86,7 +86,7 @@ export default function DishPage() {
             </div>
             <div className="text-right">
               <p className="text-sm text-gray-500">Created by</p>
-              <p className="text-sm font-medium text-indigo-600">@{dish.creator.username}</p>
+              <p className="text-sm font-medium text-primary-dark">@{dish.creator.username}</p>
             </div>
           </div>
 
@@ -124,7 +124,7 @@ export default function DishPage() {
             </div>
             <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-green-500">📈</span>
+                <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
                 <span className="font-medium text-green-600">Up {dish.weeklyChange}% this week</span>
               </div>
               <div className="flex items-end gap-0.5 h-8">
@@ -141,12 +141,12 @@ export default function DishPage() {
 
           {/* Your Holdings */}
           {dish.yourHolding > 0 && (
-            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 mb-6">
+            <div className="bg-primary-softer border border-primary rounded-2xl p-4 mb-6">
               <h3 className="font-semibold text-gray-900 mb-2">Your Holdings</h3>
               <div className="flex justify-between items-center">
                 <div>
                   <p className="text-sm text-gray-500">{dish.yourHolding} tokens</p>
-                  <p className="text-lg font-bold text-indigo-600">${dish.yourValue.toFixed(2)}</p>
+                  <p className="text-lg font-bold text-primary-dark">${dish.yourValue.toFixed(2)}</p>
                 </div>
                 <button className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50">
                   Cash Out
@@ -176,7 +176,7 @@ export default function DishPage() {
                 <span className="text-xl text-gray-600">+</span>
               </button>
             </div>
-            <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-4 rounded-xl transition-colors">
+            <button className="w-full btn-primary font-semibold py-4 rounded-xl">
               Back for ${totalCost}
             </button>
             <p className="text-center text-xs text-gray-500 mt-2">Max $10 per dish</p>

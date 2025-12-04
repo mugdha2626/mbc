@@ -14,12 +14,12 @@ interface MiniTasteMapProps {
 
 export function MiniTasteMap({ spots, location = "New York" }: MiniTasteMapProps) {
   return (
-    <div className="relative w-full h-48 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl overflow-hidden">
+    <div className="relative w-full h-48 bg-gradient-to-br from-[var(--primary-light)] to-[var(--primary)] rounded-2xl overflow-hidden">
       {/* Grid pattern */}
       <div className="absolute inset-0 opacity-30">
         <svg width="100%" height="100%">
           <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-            <circle cx="1" cy="1" r="1" fill="#c7d2fe" />
+            <circle cx="1" cy="1" r="1" fill="#E6C5C1" />
           </pattern>
           <rect width="100%" height="100%" fill="url(#grid)" />
         </svg>
@@ -38,7 +38,7 @@ export function MiniTasteMap({ spots, location = "New York" }: MiniTasteMapProps
               alt=""
               className="w-12 h-12 rounded-full border-2 border-white shadow-md object-cover"
             />
-            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-indigo-500 rounded-full" />
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-[var(--primary-dark)] rounded-full" />
           </div>
         </div>
       ))}

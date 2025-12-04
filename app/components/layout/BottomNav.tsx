@@ -17,7 +17,7 @@ export function BottomNav() {
           <Link
             href="/"
             className={`flex flex-col items-center gap-1 ${
-              isDiscover ? "text-indigo-600" : "text-gray-400"
+              isDiscover ? "text-primary-dark" : "text-gray-400"
             }`}
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={isDiscover ? 2.5 : 2}>
@@ -31,7 +31,7 @@ export function BottomNav() {
             href="/create"
             className="relative -mt-8"
           >
-            <div className="w-14 h-14 bg-indigo-600 rounded-full flex items-center justify-center shadow-lg shadow-indigo-600/30 hover:bg-indigo-700 transition-colors">
+            <div className="w-14 h-14 btn-primary rounded-full flex items-center justify-center shadow-lg shadow-[var(--primary-dark)]/30">
               <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
@@ -43,7 +43,7 @@ export function BottomNav() {
           <Link
             href="/profile"
             className={`flex flex-col items-center gap-1 ${
-              isProfile ? "text-indigo-600" : "text-gray-400"
+              isProfile ? "text-primary-dark" : "text-gray-400"
             }`}
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={isProfile ? 2.5 : 2}>

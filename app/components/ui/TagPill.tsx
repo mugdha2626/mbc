@@ -7,10 +7,10 @@ interface TagPillProps {
 
 export function TagPill({ label, variant = "default" }: TagPillProps) {
   const variants = {
-    default: "bg-zinc-800/50 text-zinc-300 border-zinc-700/50",
-    success: "bg-green-500/20 text-green-400 border-green-500/30",
-    warning: "bg-orange-500/20 text-orange-400 border-orange-500/30",
-    info: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+    default: "bg-gray-100 text-gray-600 border-gray-200",
+    success: "bg-green-50 text-green-600 border-green-200",
+    warning: "bg-orange-50 text-orange-600 border-orange-200",
+    info: "bg-primary-softer text-primary border-primary",
   };
 
   return (

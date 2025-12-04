@@ -30,8 +30,8 @@ export function FilterPills({ filters, defaultActive, onFilterChange }: FilterPi
           onClick={() => handleClick(filter.id)}
           className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
             active === filter.id
-              ? "bg-purple-600 text-white"
-              : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-700/50 hover:text-zinc-300"
+              ? "btn-primary"
+              : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700"
           }`}
         >
           {filter.icon}
@@ -47,16 +47,16 @@ export const mapFilters: Filter[] = [
   {
     id: "near",
     label: "Near me",
-    icon: <span className="text-green-400">●</span>
+    icon: <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
   },
   {
     id: "top",
     label: "Top dishes",
-    icon: <span>⭐</span>
+    icon: <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
   },
   {
     id: "performing",
     label: "Highest performing",
-    icon: <span>📈</span>
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
   },
 ];

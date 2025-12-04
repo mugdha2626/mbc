@@ -29,9 +29,11 @@ export function StatCard({ stats, trend }: StatCardProps) {
       {trend && (
         <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className={trend.positive ? "text-green-400" : "text-red-400"}>
-              {trend.positive ? "📈" : "📉"}
-            </span>
+            {trend.positive ? (
+              <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+            ) : (
+              <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/></svg>
+            )}
             <span className={`font-semibold ${trend.positive ? "text-green-400" : "text-red-400"}`}>
               {trend.value}
             </span>

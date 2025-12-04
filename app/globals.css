@@ -1,16 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8f9fa;
-  --foreground: #1a1a2e;
+  --background: #fdfaf8;
+  --foreground: #3a3433;
   --card: #ffffff;
-  --card-border: #e5e7eb;
-  --primary: #4f46e5;
-  --primary-light: #eef2ff;
-  --success: #22c55e;
-  --success-light: #dcfce7;
-  --muted: #6b7280;
-  --muted-light: #f3f4f6;
+  --card-border: #ede7e5;
+  --primary: #f2dbd8;
+  --primary-dark: #c4908a;
+  --primary-hover: #e6c5c1;
+  --primary-light: #faf4f3;
+  --primary-text: #8b6b68;
+  --success: #6baf7c;
+  --success-light: #e8f4ea;
+  --muted: #9a8e8b;
+  --muted-light: #f3efed;
 }
 
 @theme inline {
@@ -23,7 +26,8 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -91,16 +95,16 @@ html {
   position: absolute;
   width: 8px;
   height: 8px;
-  background: #4f46e5;
+  background: var(--primary-dark);
   border-radius: 50%;
   transform: translate(-50%, -50%);
 }
 
 /* Dashed button */
 .btn-dashed {
-  border: 2px dashed #d1d5db;
+  border: 2px dashed var(--card-border);
   background: transparent;
-  color: #6b7280;
+  color: var(--muted);
   border-radius: 12px;
   padding: 16px;
   width: 100%;
@@ -108,6 +112,45 @@ html {
   transition: all 0.2s;
 }
 .btn-dashed:hover {
-  border-color: #9ca3af;
-  color: #374151;
+  border-color: var(--primary-hover);
+  color: var(--foreground);
+}
+
+/* Primary button styles */
+.btn-primary {
+  background: var(--primary-dark);
+  color: white;
+  transition: all 0.2s;
+}
+.btn-primary:hover {
+  background: #b5817b;
+}
+.btn-primary:disabled {
+  background: var(--muted-light);
+  color: var(--muted);
+}
+
+/* Primary soft/accent styles */
+.bg-primary-soft {
+  background: var(--primary);
+}
+.bg-primary-softer {
+  background: var(--primary-light);
+}
+.border-primary {
+  border-color: var(--primary);
+}
+.border-primary-soft {
+  border-color: var(--primary-hover);
+}
+.text-primary {
+  color: var(--primary-text);
+}
+.text-primary-dark {
+  color: var(--primary-dark);
+}
+
+/* Ring styles for focus */
+.ring-primary {
+  --tw-ring-color: var(--primary-hover);
 }

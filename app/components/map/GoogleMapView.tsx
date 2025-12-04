@@ -69,7 +69,7 @@ export function GoogleMapView({
                   <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd"/></svg>
                 </div>
               )}
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-indigo-500 rounded-full border-2 border-white" />
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-[var(--primary-dark)] rounded-full border-2 border-white" />
             </div>
           </AdvancedMarker>
         ))}
@@ -118,12 +118,12 @@ function PlaceholderMap({ restaurants }: { restaurants: Restaurant[] }) {
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
 
   return (
-    <div className="relative w-full h-full bg-gradient-to-br from-blue-50 to-indigo-100 overflow-hidden">
+    <div className="relative w-full h-full bg-gradient-to-br from-[var(--primary-light)] to-[var(--primary)] overflow-hidden">
       {/* Grid pattern */}
       <div className="absolute inset-0">
         <svg width="100%" height="100%" className="opacity-30">
           <pattern id="mapGrid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <circle cx="2" cy="2" r="1.5" fill="#a5b4fc" />
+            <circle cx="2" cy="2" r="1.5" fill="#E6C5C1" />
           </pattern>
           <rect width="100%" height="100%" fill="url(#mapGrid)" />
         </svg>
@@ -131,10 +131,10 @@ function PlaceholderMap({ restaurants }: { restaurants: Restaurant[] }) {
 
       {/* Roads */}
       <svg className="absolute inset-0 w-full h-full opacity-20">
-        <line x1="0" y1="30%" x2="100%" y2="45%" stroke="#6366f1" strokeWidth="8" />
-        <line x1="20%" y1="0" x2="35%" y2="100%" stroke="#6366f1" strokeWidth="6" />
-        <line x1="60%" y1="0" x2="70%" y2="100%" stroke="#6366f1" strokeWidth="5" />
-        <line x1="0" y1="70%" x2="100%" y2="60%" stroke="#6366f1" strokeWidth="4" />
+        <line x1="0" y1="30%" x2="100%" y2="45%" stroke="#C4908A" strokeWidth="8" />
+        <line x1="20%" y1="0" x2="35%" y2="100%" stroke="#C4908A" strokeWidth="6" />
+        <line x1="60%" y1="0" x2="70%" y2="100%" stroke="#C4908A" strokeWidth="5" />
+        <line x1="0" y1="70%" x2="100%" y2="60%" stroke="#C4908A" strokeWidth="4" />
       </svg>
 
       {/* Restaurant markers */}
@@ -167,7 +167,7 @@ function PlaceholderMap({ restaurants }: { restaurants: Restaurant[] }) {
                   <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd"/></svg>
                 </div>
               )}
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-indigo-500 rounded-full border-2 border-white" />
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-[var(--primary-dark)] rounded-full border-2 border-white" />
             </div>
           </div>
         );
@@ -178,7 +178,7 @@ function PlaceholderMap({ restaurants }: { restaurants: Restaurant[] }) {
         className="absolute z-10"
         style={{ left: "50%", top: "50%" }}
       >
-        <div className="w-4 h-4 bg-indigo-600 rounded-full animate-pulse ring-4 ring-indigo-300" />
+        <div className="w-4 h-4 bg-[var(--primary-dark)] rounded-full animate-pulse ring-4 ring-[var(--primary)]" />
       </div>
 
       {/* Map attribution */}

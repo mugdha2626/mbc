@@ -30,7 +30,7 @@ export default function Home() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search dishes, restaurants..."
-            className="w-full bg-gray-100 rounded-xl py-3 pl-10 pr-4 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+            className="w-full bg-gray-100 rounded-xl py-3 pl-10 pr-4 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--primary-hover)]"
           />
         </div>
 
@@ -42,7 +42,7 @@ export default function Home() {
               onClick={() => setActiveFilter(filter.id)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
                 activeFilter === filter.id
-                  ? "bg-indigo-600 text-white"
+                  ? "btn-primary"
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
             >
