@@ -2,6 +2,8 @@
 
 Smart contracts for tmap - The First Social Map of Food Culture You Can Own.
 
+Deployed contract address: 0xF8769B70D392C306018C5474933D59846feb217A
+
 ## Overview
 
 The `TmapDishes` contract is an ERC1155 token that represents dish badges at restaurants. Each dish has its own bonding curve, allowing users to mint and trade dish tokens.
@@ -115,8 +117,3 @@ The reward system uses the "reward per token" pattern (similar to Synthetix stak
 - $10 cap prevents whale manipulation
 - One-way bonding curve (price never decreases)
 - Reward calculations use high precision to prevent rounding attacks
-
-## License
-
-MIT
-
