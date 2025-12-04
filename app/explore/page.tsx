@@ -84,9 +84,40 @@ export default function ExplorePage() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Map Section with Overlay */}
+      <div className="relative h-48 bg-gray-200">
+        {/* Map Background */}
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{
+            backgroundImage: "url('https://api.mapbox.com/styles/v1/mapbox/light-v11/static/-73.99,40.73,12,0/400x200@2x?access_token=pk.placeholder')",
+            backgroundColor: "#e5e7eb"
+          }}
+        >
+          {/* Gradient overlay for better text readability */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/40" />
+        </div>
+
+        {/* Spots Count Overlay */}
+        <div className="absolute bottom-4 left-4 right-4">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg">
+              <svg className="w-5 h-5 text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-white font-semibold text-lg drop-shadow-md">12 spots near you</p>
+              <p className="text-white/80 text-sm drop-shadow-md">Within 5 miles</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters - Center Aligned */}
       <div className="bg-white px-4 py-3 border-b border-gray-100">
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+        <div className="flex gap-2 justify-center">
           {exploreFilters.map((filter) => (
             <button
               key={filter.id}
