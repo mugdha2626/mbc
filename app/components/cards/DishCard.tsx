@@ -40,7 +40,7 @@ export function DishCard({
           {/* Image */}
           <div className="flex-shrink-0">
             <img
-              src={image}
+              src={image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400"}
               alt={name}
               className="w-20 h-20 rounded-xl object-cover"
             />

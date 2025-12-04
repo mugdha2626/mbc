@@ -91,7 +91,7 @@ export default function PortfolioPage() {
               <div className="bg-white border border-gray-100 rounded-xl p-4 hover:border-gray-200 transition-colors shadow-sm">
                 <div className="flex gap-4">
                   <img
-                    src={holding.image}
+                    src={holding.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"}
                     alt={holding.name}
                     className="w-14 h-14 rounded-lg object-cover"
                   />
@@ -128,7 +128,7 @@ export default function PortfolioPage() {
                 <div className="flex gap-4">
                   <div className="relative">
                     <img
-                      src={token.image}
+                      src={token.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"}
                       alt={token.name}
                       className="w-14 h-14 rounded-lg object-cover"
                     />

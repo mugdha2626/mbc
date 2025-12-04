@@ -416,7 +416,7 @@ export default function DishPage() {
               onClick={() => router.push(`/restaurant/${dish.restaurant}`)}
             >
               <img
-                src={dish.restaurantImage || "https://via.placeholder.com/40"}
+                src={dish.restaurantImage || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=100"}
                 alt={dish.restaurantName || "Restaurant"}
                 className="w-10 h-10 rounded-full object-cover"
               />

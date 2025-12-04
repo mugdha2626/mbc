@@ -34,7 +34,7 @@ export function MiniTasteMap({ spots, location = "New York" }: MiniTasteMapProps
         >
           <div className="relative">
             <img
-              src={spot.image}
+              src={spot.image || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=100"}
               alt=""
               className="w-12 h-12 rounded-full border-2 border-white shadow-md object-cover"
             />

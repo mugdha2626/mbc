@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { addToWishlist, removeFromWishlist, getWishlist } from "@/lib/db/users";
+import { addToWishlist, removeFromWishlist } from "@/lib/db/users";
+import { cleanupOrphanedWishlistItems } from "@/lib/db/restaurants";
 
 export async function GET(request: NextRequest) {
     try {
@@ -15,7 +16,8 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: "Invalid FID" }, { status: 400 });
         }
 
-        const wishlist = await getWishlist(fidNum);
+        // Clean up orphaned wishlist items and return the cleaned list
+        const wishlist = await cleanupOrphanedWishlistItems(fidNum);
         return NextResponse.json({ wishlist });
     } catch (error) {
         console.error("Error fetching wishlist:", error);

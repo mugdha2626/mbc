@@ -511,25 +511,40 @@ export default function CreatePage() {
     }
   };
 
-  // Search restaurants
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    setIsSearching(true);
-    try {
-      const params = new URLSearchParams({ q: searchQuery });
-      if (userLocation) {
-        params.set("lat", userLocation.lat.toString());
-        params.set("lng", userLocation.lng.toString());
-      }
-      const res = await fetch(`/api/places/search?${params}`);
-      const data = await res.json();
-      if (data.places) setSearchResults(data.places);
-    } catch (err) {
-      console.error("Search failed:", err);
-    } finally {
+  // Dynamic search with debouncing
+  useEffect(() => {
+    const trimmedQuery = searchQuery.trim();
+
+    // Clear results if query is too short
+    if (trimmedQuery.length < 2) {
+      setSearchResults([]);
       setIsSearching(false);
+      return;
     }
-  };
+
+    // Set searching state immediately for UI feedback
+    setIsSearching(true);
+
+    // Debounce the search - keep it short for autocomplete feel
+    const debounceTimer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ q: trimmedQuery });
+        if (userLocation) {
+          params.set("lat", userLocation.lat.toString());
+          params.set("lng", userLocation.lng.toString());
+        }
+        const res = await fetch(`/api/places/search?${params}`);
+        const data = await res.json();
+        if (data.places) setSearchResults(data.places);
+      } catch (err) {
+        console.error("Search failed:", err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 150); // 150ms debounce for fast autocomplete
+
+    return () => clearTimeout(debounceTimer);
+  }, [searchQuery, userLocation]);
 
   // Verify location
   const handleVerifyLocation = async () => {
@@ -688,30 +703,26 @@ export default function CreatePage() {
           <div className="space-y-4">
             <div>
               <h2 className="text-lg font-semibold text-gray-900 mb-2">
-                Find the Restaurant
+                Find the Place
               </h2>
               <p className="text-sm text-gray-500 mb-4">
-                Search for the restaurant where you want to create a dish Stamp.
+                Search for the restaurant, cafe, or bar where you want to create a dish Stamp.
               </p>
-              <div className="flex gap-2">
+              <div className="relative">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                  placeholder="Search restaurants..."
-                  className="flex-1 bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Search restaurants, cafes, bars..."
+                  className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 pr-10 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  autoFocus
                 />
-                <button
-                  onClick={handleSearch}
-                  disabled={isSearching || !searchQuery.trim()}
-                  className="px-4 btn-primary disabled:bg-gray-200 rounded-xl"
-                >
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
                   {isSearching ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
                   ) : (
                     <svg
-                      className="w-5 h-5"
+                      className="w-5 h-5 text-gray-400"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -724,8 +735,11 @@ export default function CreatePage() {
                       />
                     </svg>
                   )}
-                </button>
+                </div>
               </div>
+              {searchQuery.trim().length > 0 && searchQuery.trim().length < 2 && (
+                <p className="text-xs text-gray-400 mt-2">Type at least 2 characters to search</p>
+              )}
             </div>
             {searchResults.length > 0 && (
               <div className="space-y-2">

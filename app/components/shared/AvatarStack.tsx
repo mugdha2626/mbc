@@ -20,7 +20,7 @@ export function AvatarStack({ avatars, max = 3, size = "sm" }: AvatarStackProps)
       {displayed.map((avatar, index) => (
         <img
           key={index}
-          src={avatar}
+          src={avatar || "https://api.dicebear.com/7.x/shapes/svg?seed=" + index}
           alt=""
           className={`${sizeClasses[size]} rounded-full border-2 border-zinc-900`}
         />
