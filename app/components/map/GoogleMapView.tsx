@@ -1,7 +1,7 @@
 "use client";
 
 import { APIProvider, Map, AdvancedMarker } from "@vis.gl/react-google-maps";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 
 interface Restaurant {
@@ -10,42 +10,50 @@ interface Restaurant {
   lat: number;
   lng: number;
   image: string;
+  address?: string;
   dishCount: number;
-  tmapRating: number; // 0-10 score
-  trending?: boolean;
+  tmapRating: number;
 }
 
 interface GoogleMapViewProps {
   restaurants?: Restaurant[];
   center?: { lat: number; lng: number };
   apiKey: string;
+  selectedLocation?: { lat: number; lng: number; id: string } | null;
 }
 
-// Mock restaurants for demo
-const mockRestaurants: Restaurant[] = [
-  { id: "1", name: "Spicy House", lat: 40.7580, lng: -73.9855, image: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=100", dishCount: 8, tmapRating: 8.5, trending: true },
-  { id: "2", name: "Joe's Pizza", lat: 40.7614, lng: -73.9776, image: "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=100", dishCount: 5, tmapRating: 9.2 },
-  { id: "3", name: "The Garden Kitchen", lat: 40.7549, lng: -73.9840, image: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=100", dishCount: 12, tmapRating: 7.8 },
-  { id: "4", name: "Sushi Master", lat: 40.7505, lng: -73.9934, image: "https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=100", dishCount: 6, tmapRating: 8.9 },
-];
-
 export function GoogleMapView({
-  restaurants = mockRestaurants,
+  restaurants = [],
   center = { lat: 40.7549, lng: -73.9840 },
   apiKey,
+  selectedLocation,
 }: GoogleMapViewProps) {
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+  const [mapCenter, setMapCenter] = useState(center);
+
+  // Handle selected location from search
+  useEffect(() => {
+    if (selectedLocation) {
+      setMapCenter({ lat: selectedLocation.lat, lng: selectedLocation.lng });
+      // Find and select the restaurant if it matches
+      const restaurant = restaurants.find(r => r.id === selectedLocation.id);
+      if (restaurant) {
+        setSelectedRestaurant(restaurant);
+      }
+    }
+  }, [selectedLocation, restaurants]);
 
   // If no API key, show placeholder map
   if (!apiKey) {
-    return <PlaceholderMap restaurants={restaurants} />;
+    return <PlaceholderMap restaurants={restaurants} selectedLocation={selectedLocation} />;
   }
 
   return (
     <APIProvider apiKey={apiKey}>
       <Map
-        defaultCenter={center}
+        center={mapCenter}
         defaultZoom={14}
+        zoom={selectedLocation ? 16 : 14}
         mapId="tmap-main"
         className="w-full h-full"
         disableDefaultUI
@@ -114,8 +122,24 @@ export function GoogleMapView({
 }
 
 // Placeholder map when no API key is provided
-function PlaceholderMap({ restaurants }: { restaurants: Restaurant[] }) {
+function PlaceholderMap({
+  restaurants,
+  selectedLocation
+}: {
+  restaurants: Restaurant[];
+  selectedLocation?: { lat: number; lng: number; id: string } | null;
+}) {
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+
+  // Handle selected location from search
+  useEffect(() => {
+    if (selectedLocation) {
+      const restaurant = restaurants.find(r => r.id === selectedLocation.id);
+      if (restaurant) {
+        setSelectedRestaurant(restaurant);
+      }
+    }
+  }, [selectedLocation, restaurants]);
 
   return (
     <div className="relative w-full h-full bg-gradient-to-br from-[var(--primary-light)] to-[var(--primary)] overflow-hidden">
