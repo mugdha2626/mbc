@@ -25,8 +25,11 @@ type CreateStep =
   | "idle"
   | "checking"
   | "approving"
+  | "waitingApproval"
   | "creating"
+  | "waitingCreate"
   | "minting"
+  | "waitingMint"
   | "saving"
   | "complete";
 
@@ -58,7 +61,7 @@ export default function CreatePage() {
   const [createStep, setCreateStep] = useState<CreateStep>("idle");
   const [createError, setCreateError] = useState("");
   const [dishId, setDishId] = useState<`0x${string}` | null>(null);
-  const [isNewDish, setIsNewDish] = useState(true); // Track if dish is new or existing
+  const [isNewDish, setIsNewDish] = useState(true);
 
   // Get user's current location for biased search
   const [userLocation, setUserLocation] = useState<{
@@ -69,43 +72,49 @@ export default function CreatePage() {
   // User's Farcaster FID
   const [userFid, setUserFid] = useState<Fid | undefined>(undefined);
 
-  // Contract write hooks
+  // Contract write hooks - using writeContractAsync for better control
   const {
-    writeContract: writeApprove,
+    writeContractAsync: writeApproveAsync,
     data: approveHash,
     isPending: isApprovePending,
     error: approveError,
+    reset: resetApprove,
   } = useWriteContract();
 
   const {
-    writeContract: writeCreateDish,
+    writeContractAsync: writeCreateDishAsync,
     data: createDishHash,
     isPending: isCreatePending,
     error: createDishError,
+    reset: resetCreate,
   } = useWriteContract();
 
   const {
-    writeContract: writeMint,
+    writeContractAsync: writeMintAsync,
     data: mintHash,
     isPending: isMintPending,
     error: mintError,
+    reset: resetMint,
   } = useWriteContract();
 
   // Wait for transaction receipts
-  const { isSuccess: isApproveSuccess } = useWaitForTransactionReceipt({
-    hash: approveHash,
-  });
+  const { isSuccess: isApproveSuccess, isError: isApproveError } =
+    useWaitForTransactionReceipt({
+      hash: approveHash,
+    });
 
-  const { isSuccess: isCreateSuccess } = useWaitForTransactionReceipt({
-    hash: createDishHash,
-  });
+  const { isSuccess: isCreateSuccess, isError: isCreateError } =
+    useWaitForTransactionReceipt({
+      hash: createDishHash,
+    });
 
-  const { isSuccess: isMintSuccess } = useWaitForTransactionReceipt({
-    hash: mintHash,
-  });
+  const { isSuccess: isMintSuccess, isError: isMintError } =
+    useWaitForTransactionReceipt({
+      hash: mintHash,
+    });
 
   // Check USDC allowance
-  const { data: allowance } = useReadContract({
+  const { data: allowance, refetch: refetchAllowance } = useReadContract({
     address: USDC_ADDRESS,
     abi: ERC20_ABI,
     functionName: "allowance",
@@ -134,85 +143,128 @@ export default function CreatePage() {
       });
   }, []);
 
-  // Handle approval success -> create dish or mint (depending on isNewDish)
+  // Handle approval confirmation -> proceed to next step
   useEffect(() => {
-    if (isApproveSuccess && createStep === "approving" && dishId) {
+    if (isApproveSuccess && createStep === "waitingApproval" && dishId) {
+      console.log("Approval confirmed, proceeding...");
+      refetchAllowance(); // Refresh allowance
       if (isNewDish) {
-        setCreateStep("creating");
-        createDishOnChain();
+        proceedToCreateDish();
       } else {
-        // Existing dish - skip create, go straight to mint
-        setCreateStep("minting");
-        mintTokens();
+        proceedToMint();
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isApproveSuccess, createStep, dishId, isNewDish]);
-
-  // Handle create dish success -> mint
-  useEffect(() => {
-    if (isCreateSuccess && createStep === "creating" && dishId) {
-      setCreateStep("minting");
-      mintTokens();
+    if (isApproveError && createStep === "waitingApproval") {
+      setCreateError("Approval transaction failed");
+      setCreateStep("idle");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCreateSuccess, createStep, dishId]);
+  }, [isApproveSuccess, isApproveError, createStep, dishId, isNewDish]);
 
-  // Handle mint success -> save to database
+  // Handle create dish confirmation -> proceed to mint
   useEffect(() => {
-    if (isMintSuccess && createStep === "minting") {
+    if (isCreateSuccess && createStep === "waitingCreate" && dishId) {
+      console.log("Create dish confirmed, proceeding to mint...");
+      proceedToMint();
+    }
+    if (isCreateError && createStep === "waitingCreate") {
+      setCreateError("Create dish transaction failed");
+      setCreateStep("idle");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCreateSuccess, isCreateError, createStep, dishId]);
+
+  // Handle mint confirmation -> save to database
+  useEffect(() => {
+    if (isMintSuccess && createStep === "waitingMint") {
+      console.log("Mint confirmed, saving to database...");
       setCreateStep("saving");
       saveToDatabase();
     }
+    if (isMintError && createStep === "waitingMint") {
+      setCreateError("Mint transaction failed");
+      setCreateStep("idle");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMintSuccess, createStep]);
+  }, [isMintSuccess, isMintError, createStep]);
 
-  // Handle errors
+  // Handle errors from write calls
   useEffect(() => {
     if (approveError) {
+      console.error("Approve error:", approveError);
       setCreateError(approveError.message);
       setCreateStep("idle");
     }
     if (createDishError) {
+      console.error("Create dish error:", createDishError);
       setCreateError(createDishError.message);
       setCreateStep("idle");
     }
     if (mintError) {
+      console.error("Mint error:", mintError);
       setCreateError(mintError.message);
       setCreateStep("idle");
     }
   }, [approveError, createDishError, mintError]);
 
-  // Create dish on chain (only for new dishes)
-  const createDishOnChain = () => {
+  // Proceed to create dish on chain
+  const proceedToCreateDish = async () => {
     if (!dishId || !selectedRestaurant) return;
 
-    const metadata = JSON.stringify({
-      name: dishName.trim(),
-      description: dishDescription.trim() || "",
-      restaurant: selectedRestaurant.name,
-      restaurantId: selectedRestaurant.id,
-      creator: userFid,
-    });
+    try {
+      setCreateStep("creating");
+      console.log("Creating dish on chain...", dishId);
 
-    writeCreateDish({
-      address: TMAP_DISHES_ADDRESS,
-      abi: TMAP_DISHES_ABI,
-      functionName: "createDish",
-      args: [dishId, metadata],
-    });
+      const metadata = JSON.stringify({
+        name: dishName.trim(),
+        description: dishDescription.trim() || "",
+        restaurant: selectedRestaurant.name,
+        restaurantId: selectedRestaurant.id,
+        creator: userFid,
+      });
+
+      await writeCreateDishAsync({
+        address: TMAP_DISHES_ADDRESS,
+        abi: TMAP_DISHES_ABI,
+        functionName: "createDish",
+        args: [dishId, metadata],
+      });
+
+      console.log("Create dish tx submitted, waiting for confirmation...");
+      setCreateStep("waitingCreate");
+    } catch (error) {
+      console.error("Failed to create dish:", error);
+      setCreateError(
+        error instanceof Error ? error.message : "Failed to create dish"
+      );
+      setCreateStep("idle");
+    }
   };
 
-  // Mint tokens (works for both new and existing dishes)
-  const mintTokens = () => {
+  // Proceed to mint tokens
+  const proceedToMint = async () => {
     if (!dishId) return;
 
-    writeMint({
-      address: TMAP_DISHES_ADDRESS,
-      abi: TMAP_DISHES_ABI,
-      functionName: "mint",
-      args: [dishId, INITIAL_MINT_AMOUNT, zeroAddress],
-    });
+    try {
+      setCreateStep("minting");
+      console.log("Minting tokens...", dishId);
+
+      await writeMintAsync({
+        address: TMAP_DISHES_ADDRESS,
+        abi: TMAP_DISHES_ABI,
+        functionName: "mint",
+        args: [dishId, INITIAL_MINT_AMOUNT, zeroAddress],
+      });
+
+      console.log("Mint tx submitted, waiting for confirmation...");
+      setCreateStep("waitingMint");
+    } catch (error) {
+      console.error("Failed to mint:", error);
+      setCreateError(
+        error instanceof Error ? error.message : "Failed to mint tokens"
+      );
+      setCreateStep("idle");
+    }
   };
 
   // Save to database
@@ -296,11 +348,16 @@ export default function CreatePage() {
       return;
     }
 
+    // Reset any previous errors and transaction states
     setCreateError("");
+    resetApprove();
+    resetCreate();
+    resetMint();
     setCreateStep("checking");
 
     try {
       // Step 1: Check if dish already exists
+      console.log("Checking if dish exists...");
       const { exists, dishId: existingDishId } = await checkDishExists(
         selectedRestaurant.name,
         dishName
@@ -309,49 +366,50 @@ export default function CreatePage() {
       const targetDishId = existingDishId as `0x${string}`;
       setDishId(targetDishId);
       setIsNewDish(!exists);
+      console.log("Dish exists:", exists, "DishId:", targetDishId);
 
       // Step 2: Check if we need to approve USDC
+      await refetchAllowance();
       const currentAllowance = allowance as bigint | undefined;
       const needsApproval =
         !currentAllowance || currentAllowance < INITIAL_MINT_AMOUNT;
+      console.log(
+        "Current allowance:",
+        currentAllowance?.toString(),
+        "Needs approval:",
+        needsApproval
+      );
 
       if (needsApproval) {
+        // Start with approval
         setCreateStep("approving");
-        writeApprove({
-          address: USDC_ADDRESS,
-          abi: ERC20_ABI,
-          functionName: "approve",
-          args: [TMAP_DISHES_ADDRESS, INITIAL_MINT_AMOUNT * BigInt(100)],
-        });
-      } else if (exists) {
-        // Dish exists, skip approval and createDish, go straight to mint
-        setCreateStep("minting");
-        writeMint({
-          address: TMAP_DISHES_ADDRESS,
-          abi: TMAP_DISHES_ABI,
-          functionName: "mint",
-          args: [targetDishId, INITIAL_MINT_AMOUNT, zeroAddress],
-        });
-      } else {
-        // New dish, skip approval, go to createDish
-        setCreateStep("creating");
-        const metadata = JSON.stringify({
-          name: dishName.trim(),
-          description: dishDescription.trim() || "",
-          restaurant: selectedRestaurant.name,
-          restaurantId: selectedRestaurant.id,
-          creator: userFid,
-        });
+        console.log("Requesting USDC approval...");
 
-        writeCreateDish({
-          address: TMAP_DISHES_ADDRESS,
-          abi: TMAP_DISHES_ABI,
-          functionName: "createDish",
-          args: [targetDishId, metadata],
-        });
+        try {
+          await writeApproveAsync({
+            address: USDC_ADDRESS,
+            abi: ERC20_ABI,
+            functionName: "approve",
+            args: [TMAP_DISHES_ADDRESS, INITIAL_MINT_AMOUNT * BigInt(100)],
+          });
+          console.log("Approval tx submitted, waiting for confirmation...");
+          setCreateStep("waitingApproval");
+        } catch (error) {
+          console.error("Approval failed:", error);
+          setCreateError(
+            error instanceof Error ? error.message : "Approval failed"
+          );
+          setCreateStep("idle");
+        }
+      } else if (exists) {
+        // Dish exists and already approved, go straight to mint
+        await proceedToMint();
+      } else {
+        // New dish and already approved, go to createDish
+        await proceedToCreateDish();
       }
     } catch (err) {
-      console.error("Error checking dish:", err);
+      console.error("Error in handleCreateDish:", err);
       setCreateError("Failed to check dish status. Please try again.");
       setCreateStep("idle");
     }
@@ -424,10 +482,16 @@ export default function CreatePage() {
       case "checking":
         return "Checking...";
       case "approving":
-        return "Approving USDC...";
+        return "Approve in Wallet...";
+      case "waitingApproval":
+        return "Confirming Approval...";
       case "creating":
+        return "Confirm in Wallet...";
+      case "waitingCreate":
         return "Creating Dish...";
       case "minting":
+        return "Confirm in Wallet...";
+      case "waitingMint":
         return "Minting Tokens...";
       case "saving":
         return "Saving...";
@@ -444,12 +508,18 @@ export default function CreatePage() {
       case "checking":
         return "Checking if dish exists...";
       case "approving":
-        return "Approving USDC spending...";
+        return "Please approve USDC spending in your wallet...";
+      case "waitingApproval":
+        return "Waiting for approval confirmation...";
       case "creating":
-        return "Creating dish on Base Sepolia...";
+        return "Please confirm dish creation in your wallet...";
+      case "waitingCreate":
+        return "Waiting for dish creation confirmation...";
       case "minting":
+        return "Please confirm minting in your wallet...";
+      case "waitingMint":
         return isNewDish
-          ? "Minting initial tokens..."
+          ? "Waiting for mint confirmation..."
           : "Minting tokens to existing dish...";
       case "saving":
         return "Saving to database...";
@@ -459,6 +529,14 @@ export default function CreatePage() {
   };
 
   const isCreating = createStep !== "idle" && createStep !== "complete";
+  const isWaitingForWallet =
+    createStep === "approving" ||
+    createStep === "creating" ||
+    createStep === "minting";
+  const isWaitingForConfirmation =
+    createStep === "waitingApproval" ||
+    createStep === "waitingCreate" ||
+    createStep === "waitingMint";
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -920,16 +998,38 @@ export default function CreatePage() {
 
             {/* Transaction Progress */}
             {isCreating && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <div
+                className={`border rounded-xl p-4 ${
+                  isWaitingForWallet
+                    ? "bg-yellow-50 border-yellow-200"
+                    : "bg-blue-50 border-blue-200"
+                }`}
+              >
                 <div className="flex items-center gap-3">
-                  <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+                  <div
+                    className={`w-5 h-5 border-2 rounded-full animate-spin ${
+                      isWaitingForWallet
+                        ? "border-yellow-500/30 border-t-yellow-500"
+                        : "border-blue-500/30 border-t-blue-500"
+                    }`}
+                  />
                   <div>
-                    <p className="font-medium text-blue-800">
+                    <p
+                      className={`font-medium ${
+                        isWaitingForWallet ? "text-yellow-800" : "text-blue-800"
+                      }`}
+                    >
                       {getProgressMessage()}
                     </p>
-                    {createStep !== "checking" && createStep !== "saving" && (
+                    {isWaitingForWallet && (
+                      <p className="text-sm text-yellow-600 mt-1">
+                        Check your wallet for the transaction request
+                      </p>
+                    )}
+                    {isWaitingForConfirmation && (
                       <p className="text-sm text-blue-600 mt-1">
-                        Please confirm the transaction in your wallet
+                        Transaction submitted, waiting for blockchain
+                        confirmation...
                       </p>
                     )}
                   </div>
