@@ -83,17 +83,18 @@ describe("TmapDishes", function () {
     });
 
     it("should calculate correct price for first token", async function () {
-      // Price = (supply + 1) * SLOPE = 1 * 0.0125 = 0.0125 USDC
+      // Price = BASE_PRICE + (supply * SLOPE) = 0.1 + (0 * 0.0125) = 0.1 USDC
       const price = await tmapDishes.getCurrentPrice(DISH_ID);
-      expect(price).to.equal(parseUsdc(0.0125));
+      expect(price).to.equal(parseUsdc(0.1));
     });
 
     it("should calculate correct mint cost for multiple tokens", async function () {
       // Mint cost for 10 tokens from supply 0:
-      // Sum from 1 to 10 of (i * 0.0125)
-      // = 0.0125 * (1+2+3+4+5+6+7+8+9+10) = 0.0125 * 55 = 0.6875 USDC
+      // First token: BASE_PRICE + (0 * SLOPE) = 0.1
+      // Last token: BASE_PRICE + (9 * SLOPE) = 0.1 + 0.1125 = 0.2125
+      // Sum = 10 * (0.1 + 0.2125) / 2 = 1.5625 USDC
       const cost = await tmapDishes.getMintCost(DISH_ID, 10);
-      expect(cost).to.equal(parseUsdc(0.6875));
+      expect(cost).to.equal(parseUsdc(1.5625));
     });
 
     it("should calculate tokens for USDC amount", async function () {
@@ -170,11 +171,15 @@ describe("TmapDishes", function () {
       expect(protocolBalanceAfter).to.be.gt(protocolBalanceBefore);
     });
 
-    it("should reject invalid referrer", async function () {
-      // Try to use buyer2 as referrer (doesn't hold tokens)
-      await expect(
-        tmapDishes.connect(buyer1).mint(DISH_ID, parseUsdc(1), buyer2.address)
-      ).to.be.revertedWithCustomError(tmapDishes, "InvalidReferrer");
+    it("should allow any address as referrer", async function () {
+      // Any address can be a referrer, even if they don't hold tokens
+      const referrerBalanceBefore = await usdc.balanceOf(buyer2.address);
+      
+      await tmapDishes.connect(buyer1).mint(DISH_ID, parseUsdc(1), buyer2.address);
+      
+      const referrerBalanceAfter = await usdc.balanceOf(buyer2.address);
+      // Referrer should receive the referral fee
+      expect(referrerBalanceAfter).to.be.gt(referrerBalanceBefore);
     });
   });
 
