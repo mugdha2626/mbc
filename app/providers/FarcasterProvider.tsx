@@ -25,17 +25,12 @@ export function useFarcaster() {
   return useContext(FarcasterContext);
 }
 
-export function FarcasterProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function FarcasterProvider({ children }: { children: React.ReactNode }) {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
   const [user, setUser] = useState<FarcasterUser | null>(null);
 
   useEffect(() => {
     const load = async () => {
-
       try {
         await sdk.actions.ready();
         const context = await sdk.context;

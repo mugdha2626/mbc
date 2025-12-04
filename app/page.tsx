@@ -34,10 +34,17 @@ export default function Home() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number; id: string } | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<{
+    lat: number;
+    lng: number;
+    id: string;
+  } | null>(null);
   const [restaurants, setRestaurants] = useState<MapRestaurant[]>([]);
   const [isLoadingMap, setIsLoadingMap] = useState(true);
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
   const [nearbyCount, setNearbyCount] = useState<number | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
 
@@ -103,7 +110,9 @@ export default function Home() {
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`);
+        const res = await fetch(
+          `/api/search?q=${encodeURIComponent(searchQuery)}`
+        );
         const data = await res.json();
 
         const results: SearchResult[] = [];
@@ -143,7 +152,9 @@ export default function Home() {
               id: u._id,
               name: u.username,
               type: "user",
-              subtitle: `${u.reputationScore} reputation · ${u.portfolio?.dishes?.length || 0} dishes`,
+              subtitle: `${u.reputationScore} reputation · ${
+                u.portfolio?.dishes?.length || 0
+              } dishes`,
               fid: u.fid,
               pfpUrl: u.pfpUrl,
             });
@@ -198,8 +209,18 @@ export default function Home() {
             {isSearching ? (
               <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
             ) : (
-              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              <svg
+                className="w-5 h-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
               </svg>
             )}
           </div>
@@ -220,8 +241,18 @@ export default function Home() {
               }}
               className="absolute inset-y-0 right-3 flex items-center"
             >
-              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg
+                className="w-5 h-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           )}
@@ -242,21 +273,56 @@ export default function Home() {
                       className="w-10 h-10 rounded-full object-cover"
                     />
                   ) : (
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      result.type === "restaurant" ? "bg-blue-100" :
-                      result.type === "user" ? "bg-purple-100" : "bg-orange-100"
-                    }`}>
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                        result.type === "restaurant"
+                          ? "bg-blue-100"
+                          : result.type === "user"
+                          ? "bg-purple-100"
+                          : "bg-orange-100"
+                      }`}
+                    >
                       {result.type === "restaurant" ? (
-                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        <svg
+                          className="w-5 h-5 text-blue-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                          />
                         </svg>
                       ) : result.type === "user" ? (
-                        <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        <svg
+                          className="w-5 h-5 text-purple-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                          />
                         </svg>
                       ) : (
-                        <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        <svg
+                          className="w-5 h-5 text-orange-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                          />
                         </svg>
                       )}
                     </div>
@@ -265,13 +331,24 @@ export default function Home() {
                     <p className="font-medium text-gray-900 truncate">
                       {result.type === "user" ? `@${result.name}` : result.name}
                     </p>
-                    <p className="text-sm text-gray-500 truncate">{result.subtitle}</p>
+                    <p className="text-sm text-gray-500 truncate">
+                      {result.subtitle}
+                    </p>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    result.type === "restaurant" ? "bg-blue-50 text-blue-600" :
-                    result.type === "user" ? "bg-purple-50 text-purple-600" : "bg-orange-50 text-orange-600"
-                  }`}>
-                    {result.type === "restaurant" ? "Restaurant" : result.type === "user" ? "User" : "Dish"}
+                  <span
+                    className={`text-xs px-2 py-1 rounded-full ${
+                      result.type === "restaurant"
+                        ? "bg-blue-50 text-blue-600"
+                        : result.type === "user"
+                        ? "bg-purple-50 text-purple-600"
+                        : "bg-orange-50 text-orange-600"
+                    }`}
+                  >
+                    {result.type === "restaurant"
+                      ? "Restaurant"
+                      : result.type === "user"
+                      ? "User"
+                      : "Dish"}
                   </span>
                 </button>
               ))}
@@ -279,11 +356,14 @@ export default function Home() {
           )}
 
           {/* No results */}
-          {showResults && searchQuery.length >= 2 && searchResults.length === 0 && !isSearching && (
-            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-lg border border-gray-100 p-4 text-center z-30">
-              <p className="text-gray-500">No results found</p>
-            </div>
-          )}
+          {showResults &&
+            searchQuery.length >= 2 &&
+            searchResults.length === 0 &&
+            !isSearching && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-lg border border-gray-100 p-4 text-center z-30">
+                <p className="text-gray-500">No results found</p>
+              </div>
+            )}
         </div>
       </header>
 
@@ -311,8 +391,12 @@ export default function Home() {
               <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               <span className="text-sm text-gray-900 font-medium">
                 {nearbyCount !== null
-                  ? `${nearbyCount} spot${nearbyCount !== 1 ? "s" : ""} near you`
-                  : `${restaurants.length} spot${restaurants.length !== 1 ? "s" : ""} near you`}
+                  ? `${nearbyCount} spot${
+                      nearbyCount !== 1 ? "s" : ""
+                    } near you`
+                  : `${restaurants.length} spot${
+                      restaurants.length !== 1 ? "s" : ""
+                    } near you`}
               </span>
             </div>
           </div>
