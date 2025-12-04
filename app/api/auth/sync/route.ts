@@ -7,10 +7,7 @@ export async function POST(request: NextRequest) {
     const { fid, username, walletAddress } = body;
 
     if (!fid) {
-      return NextResponse.json(
-        { error: "Missing fid" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing fid" }, { status: 400 });
     }
 
     const user = await upsertUser(

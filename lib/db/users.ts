@@ -14,7 +14,7 @@ function createDefaultPortfolio(): Portfolio {
 }
 
 // Default user object
-function createDefaultUser(fid: string, username: string): User {
+function createDefaultUser(fid: number, username: string): User {
   return {
     fid,
     username,
@@ -29,7 +29,7 @@ function createDefaultUser(fid: string, username: string): User {
 /**
  * Find user by Farcaster ID
  */
-export async function findUserByFid(fid: string): Promise<User | null> {
+export async function findUserByFid(fid: number): Promise<User | null> {
   const db = await getDb();
   const user = await db.collection<User>(COLLECTION).findOne({ fid });
   return user;
@@ -40,7 +40,7 @@ export async function findUserByFid(fid: string): Promise<User | null> {
  * Returns the user (existing or newly created)
  */
 export async function upsertUser(
-  fid: string,
+  fid: number,
   username: string,
   walletAddress: string
 ): Promise<User> {
@@ -50,8 +50,8 @@ export async function upsertUser(
     { fid },
     {
       $set: {
-        username, 
-        walletAddress, 
+        username,
+        walletAddress,
       },
       $setOnInsert: {
         fid,
@@ -74,20 +74,19 @@ export async function upsertUser(
  * Update user's wallet address
  */
 export async function updateUserWallet(
-  fid: string,
+  fid: number,
   walletAddress: string
 ): Promise<void> {
   const db = await getDb();
-  await db.collection<User>(COLLECTION).updateOne(
-    { fid },
-    { $set: { walletAddress } }
-  );
+  await db
+    .collection<User>(COLLECTION)
+    .updateOne({ fid }, { $set: { walletAddress } });
 }
 
 /**
  * Get user's portfolio
  */
-export async function getUserPortfolio(fid: string): Promise<Portfolio | null> {
+export async function getUserPortfolio(fid: number): Promise<Portfolio | null> {
   const user = await findUserByFid(fid);
   return user?.portfolio || null;
 }
