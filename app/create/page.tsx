@@ -202,42 +202,46 @@ export default function CreatePage() {
 
       {/* Progress Steps */}
       <div className="bg-white px-4 py-4 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          {[1, 2, 3, 4].map((s) => (
-            <div key={s} className="flex-1 flex items-center gap-2">
+        <div className="flex items-center justify-between relative">
+          {/* Connecting lines */}
+          <div className="absolute top-4 left-4 right-4 h-1 flex">
+            {[1, 2, 3].map((s) => (
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                  s < step
-                    ? "bg-green-500 text-white"
-                    : s === step
-                    ? "btn-primary"
-                    : "bg-gray-100 text-gray-400"
+                key={s}
+                className={`flex-1 h-1 ${
+                  s < step ? "bg-green-500" : "bg-gray-200"
                 }`}
-              >
-                {s < step ? (
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                ) : (
-                  s
-                )}
-              </div>
-              {s < 4 && (
-                <div
-                  className={`flex-1 h-1 rounded ${
-                    s < step ? "bg-green-500" : "bg-gray-200"
-                  }`}
-                />
+              />
+            ))}
+          </div>
+          {/* Bubbles */}
+          {[1, 2, 3, 4].map((s) => (
+            <div
+              key={s}
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium z-10 ${
+                s < step
+                  ? "bg-green-500 text-white"
+                  : s === step
+                  ? "btn-primary"
+                  : "bg-gray-100 text-gray-400"
+              }`}
+            >
+              {s < step ? (
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              ) : (
+                s
               )}
             </div>
           ))}
