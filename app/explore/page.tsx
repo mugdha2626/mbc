@@ -56,25 +56,17 @@ export default function ExplorePage() {
 
   // Fetch user's current location on mount
   useEffect(() => {
-    console.log("[Explore] Requesting location...");
     getCurrentPosition()
       .then((pos) => {
-        console.log("[Explore] Location received:", pos.coords.latitude, pos.coords.longitude);
         setUserLocation({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
         });
       })
-      .catch((err) => {
-        console.error("[Explore] Location error:", err);
-        // Fall back to default location (NYC) - handled by GoogleMapView default
+      .catch(() => {
+        // Location unavailable - will use default center
       });
   }, []);
-
-  // Debug: log when userLocation changes
-  useEffect(() => {
-    console.log("[Explore] userLocation state:", userLocation);
-  }, [userLocation]);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">

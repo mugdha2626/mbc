@@ -35,23 +35,22 @@ export function GoogleMapView({
   showRecenterButton = false,
 }: GoogleMapViewProps) {
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
-  // Only used for overrides (selected location, recenter)
-  const [centerOverride, setCenterOverride] = useState<{ lat: number; lng: number } | null>(null);
+  // Track the initial center (set once when center prop first becomes available)
+  const [initialCenter, setInitialCenter] = useState<{ lat: number; lng: number } | null>(null);
+  // For programmatic moves (recenter button, selecting location) - cleared after use
+  const [flyToCenter, setFlyToCenter] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Compute effective center: override > selectedLocation > center prop > default
-  const mapCenter = centerOverride 
-    || (selectedLocation ? { lat: selectedLocation.lat, lng: selectedLocation.lng } : null)
-    || center 
-    || DEFAULT_CENTER;
+  // Set initial center once when center prop becomes available
+  useEffect(() => {
+    if (center && !initialCenter) {
+      setInitialCenter(center);
+    }
+  }, [center, initialCenter]);
 
-  // Debug logging
-  console.log("[GoogleMapView] Props:", { center, userLocation, apiKey: apiKey ? "present" : "missing" });
-  console.log("[GoogleMapView] Computed mapCenter:", mapCenter);
-
-  // Handle selected location from search
+  // Handle selected location from search - fly to it
   useEffect(() => {
     if (selectedLocation) {
-      setCenterOverride({ lat: selectedLocation.lat, lng: selectedLocation.lng });
+      setFlyToCenter({ lat: selectedLocation.lat, lng: selectedLocation.lng });
       const restaurant = restaurants.find(r => r.id === selectedLocation.id);
       if (restaurant) {
         setSelectedRestaurant(restaurant);
@@ -59,19 +58,23 @@ export function GoogleMapView({
     }
   }, [selectedLocation, restaurants]);
 
-  // Clear override when center prop changes (e.g., user location fetched)
+  // Clear flyToCenter after a brief moment so user can scroll freely
   useEffect(() => {
-    if (center) {
-      setCenterOverride(null);
+    if (flyToCenter) {
+      const timer = setTimeout(() => setFlyToCenter(null), 100);
+      return () => clearTimeout(timer);
     }
-  }, [center?.lat, center?.lng]);
+  }, [flyToCenter]);
 
   // Recenter to user location
   const handleRecenter = () => {
     if (userLocation) {
-      setCenterOverride({ lat: userLocation.lat, lng: userLocation.lng });
+      setFlyToCenter({ lat: userLocation.lat, lng: userLocation.lng });
     }
   };
+
+  // The center to use: flyTo (temporary) > initial > default
+  const mapCenter = flyToCenter || initialCenter || center || DEFAULT_CENTER;
 
   // If no API key, show placeholder map
   if (!apiKey) {
@@ -88,9 +91,9 @@ export function GoogleMapView({
   return (
     <APIProvider apiKey={apiKey}>
       <Map
-        center={mapCenter}
+        defaultCenter={mapCenter}
+        center={flyToCenter || undefined}
         defaultZoom={15}
-        zoom={selectedLocation ? 16 : 15}
         mapId="tmap-main"
         className="w-full h-full"
         disableDefaultUI

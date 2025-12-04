@@ -49,30 +49,15 @@ export function isWithinRange(
  */
 export function getCurrentPosition(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
-    console.log("[geo] getCurrentPosition called");
-    console.log("[geo] navigator.geolocation:", !!navigator.geolocation);
-    
     if (!navigator.geolocation) {
-      console.error("[geo] Geolocation not supported");
       reject(new Error("Geolocation is not supported"));
       return;
     }
 
-    console.log("[geo] Calling navigator.geolocation.getCurrentPosition...");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        console.log("[geo] Success:", position.coords.latitude, position.coords.longitude);
-        resolve(position);
-      },
-      (error) => {
-        console.error("[geo] Error:", error.code, error.message);
-        reject(error);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
-      }
-    );
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0,
+    });
   });
 }

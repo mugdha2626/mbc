@@ -42,17 +42,15 @@ export default function Home() {
 
   // Fetch user's current location on mount
   useEffect(() => {
-    console.log("[Home] Requesting location...");
     getCurrentPosition()
       .then((pos) => {
-        console.log("[Home] Location received:", pos.coords.latitude, pos.coords.longitude);
         setUserLocation({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
         });
       })
-      .catch((err) => {
-        console.error("[Home] Location error:", err);
+      .catch(() => {
+        // Location unavailable - will use default center
       });
   }, []);
 
