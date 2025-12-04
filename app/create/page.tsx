@@ -4,14 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { BottomNav } from "@/app/components/layout/BottomNav";
 import { getCurrentPosition, isWithinRange } from "@/lib/geo";
-
-interface Restaurant {
-  id: string;
-  name: string;
-  address: string;
-  latitude: number;
-  longitude: number;
-}
+import getFid from "@/app/providers/Fid";
+import { Fid, Restaurant } from "@/app/interface";
 
 export default function CreatePage() {
   const router = useRouter();
@@ -36,13 +30,25 @@ export default function CreatePage() {
   const [dishName, setDishName] = useState("");
   const [dishDescription, setDishDescription] = useState("");
 
+  // Step 4: Creating
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+
   // Get user's current location for biased search
   const [userLocation, setUserLocation] = useState<{
     lat: number;
     lng: number;
   } | null>(null);
 
+  // User's Farcaster FID
+  const [userFid, setUserFid] = useState<Fid | undefined>(undefined);
+
   useEffect(() => {
+    // Get user's Farcaster FID on mount
+    getFid().then((fid) => {
+      setUserFid(fid);
+    });
+
     // Get user location on mount for better search results
     getCurrentPosition()
       .then((pos) => {
@@ -78,6 +84,54 @@ export default function CreatePage() {
       console.error("Search failed:", err);
     } finally {
       setIsSearching(false);
+    }
+  };
+
+  // Create dish token
+  const handleCreateDish = async () => {
+    if (!selectedRestaurant || !dishName.trim()) return;
+
+    if (!userFid) {
+      setCreateError("Unable to get your Farcaster ID. Please try again.");
+      return;
+    }
+
+    setIsCreating(true);
+    setCreateError("");
+
+    try {
+      const res = await fetch("/api/dish/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: dishName.trim(),
+          description: dishDescription.trim() || undefined,
+          restaurantId: selectedRestaurant.id,
+          restaurantName: selectedRestaurant.name,
+          restaurantAddress: selectedRestaurant.address,
+          restaurantLatitude: selectedRestaurant.latitude,
+          restaurantLongitude: selectedRestaurant.longitude,
+          creatorFid: userFid,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create dish");
+      }
+
+      // Success - navigate to profile or dish page
+      router.push(`/dish/${data.dish.tokenAdrress}`);
+    } catch (err) {
+      console.error("Failed to create dish:", err);
+      setCreateError(
+        err instanceof Error ? err.message : "Failed to create dish"
+      );
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -364,7 +418,7 @@ export default function CreatePage() {
                 </p>
                 <p className="text-sm text-red-600 mt-1">
                   You{"'"}re {verificationResult.distance}m away. You need to be
-                  within 100m.
+                  within 200m.
                 </p>
               </div>
             )}
@@ -545,7 +599,7 @@ export default function CreatePage() {
 
             <div className="bg-primary-softer border border-primary rounded-xl p-4">
               <div className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-primary-soft rounded-full flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 bg-primary-soft rounded-full flex items-center justify-center shrink-0">
                   <svg
                     className="w-4 h-4 text-primary-dark"
                     fill="currentColor"
@@ -565,14 +619,25 @@ export default function CreatePage() {
               </div>
             </div>
 
+            {createError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+                <p className="text-red-700">{createError}</p>
+              </div>
+            )}
+
             <button
-              onClick={() => {
-                // TODO: Call API to create dish
-                router.push("/profile");
-              }}
-              className="w-full btn-primary font-semibold py-4 rounded-xl"
+              onClick={handleCreateDish}
+              disabled={isCreating}
+              className="w-full btn-primary disabled:opacity-60 font-semibold py-4 rounded-xl flex items-center justify-center gap-2"
             >
-              Create Token
+              {isCreating ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Create Token"
+              )}
             </button>
           </div>
         )}

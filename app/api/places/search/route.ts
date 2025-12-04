@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Restaurant, RestaurantId, Dish } from "@/app/interface";
 
 const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-
-interface PlaceResult {
-  id: string;
-  name: string;
-  address: string;
-  latitude: number;
-  longitude: number;
-}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -74,19 +67,22 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
 
-    // Transform to simpler format
-    const places: PlaceResult[] = (data.places || []).map(
+    // Transform to Restaurant format matching interface.tsx
+    const places: Restaurant[] = (data.places || []).map(
       (place: {
         id: string;
         displayName?: { text: string };
         formattedAddress?: string;
         location?: { latitude: number; longitude: number };
-      }) => ({
-        id: place.id,
+      }): Restaurant => ({
+        id: place.id as RestaurantId,
         name: place.displayName?.text || "Unknown",
         address: place.formattedAddress || "",
         latitude: place.location?.latitude || 0,
         longitude: place.location?.longitude || 0,
+        image: "",
+        dishes: [] as Dish[],
+        tmapRating: 0,
       })
     );
 

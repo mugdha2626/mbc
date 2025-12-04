@@ -1,6 +1,6 @@
 export type DishAddress = string;
 export type RestaurantId = string;
-export type Fid = string;
+export type Fid = number;
 
 export interface User {
   fid: Fid;
@@ -29,8 +29,8 @@ export interface Restaurant {
   id: RestaurantId;
   latitude: number;
   longitude: number;
-  placeId: string;
   name: string;
+  address: string;
   image: string;
   dishes: Dish[];
   tmapRating: number;
