@@ -24,7 +24,7 @@ export function calculateDistance(
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-  return R * c; 
+  return R * c; // Distance in meters
 }
 
 /**
@@ -35,7 +35,7 @@ export function isWithinRange(
   userLng: number,
   targetLat: number,
   targetLng: number,
-  maxDistanceMeters: number = 100
+  maxDistanceMeters: number = 200
 ): { isValid: boolean; distance: number } {
   const distance = calculateDistance(userLat, userLng, targetLat, targetLng);
   return {

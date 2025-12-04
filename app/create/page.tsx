@@ -91,7 +91,7 @@ export default function CreatePage() {
         position.coords.longitude,
         selectedRestaurant.latitude,
         selectedRestaurant.longitude,
-        100 // 100 meters max
+        200 // 200 meters
       );
 
       setVerificationResult({
@@ -278,7 +278,7 @@ export default function CreatePage() {
                 </div>
                 <p className="font-medium text-red-800">You're too far away</p>
                 <p className="text-sm text-red-600 mt-1">
-                  You're {verificationResult.distance}m away. You need to be within 100m.
+                  You're {verificationResult.distance}m away. You need to be within 200m.
                 </p>
               </div>
             )}
