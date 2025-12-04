@@ -95,7 +95,7 @@ export default function CreatePage() {
         position.coords.longitude,
         selectedRestaurant.latitude,
         selectedRestaurant.longitude,
-        100 // 100 meters max
+        200 // 200 meters
       );
 
       setVerificationResult({
