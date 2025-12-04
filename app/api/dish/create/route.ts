@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { Dish, DishId, Fid, RestaurantId } from "@/app/interface";
 import { keccak256, toBytes } from "viem";
+import { updateRestaurantRating } from "@/lib/db/restaurants";
 
 // Extended Dish type for database storage (includes extra fields)
 interface DishDocument extends Dish {
@@ -201,6 +202,9 @@ export async function POST(request: NextRequest) {
         $set: { updatedAt: now },
       }
     );
+
+    // Update the restaurant's rating based on all its dishes
+    await updateRestaurantRating(body.restaurantId);
 
     return NextResponse.json(
       {
