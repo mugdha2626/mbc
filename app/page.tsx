@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { BottomNav } from "./components/layout/BottomNav";
 import { GoogleMapView } from "./components/map/GoogleMapView";
+import { getCurrentPosition } from "@/lib/geo";
 
 interface SearchResult {
   id: string;
@@ -35,7 +36,24 @@ export default function Home() {
   const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number; id: string } | null>(null);
   const [restaurants, setRestaurants] = useState<MapRestaurant[]>([]);
   const [isLoadingMap, setIsLoadingMap] = useState(true);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
+
+  // Fetch user's current location on mount
+  useEffect(() => {
+    console.log("[Home] Requesting location...");
+    getCurrentPosition()
+      .then((pos) => {
+        console.log("[Home] Location received:", pos.coords.latitude, pos.coords.longitude);
+        setUserLocation({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
+      })
+      .catch((err) => {
+        console.error("[Home] Location error:", err);
+      });
+  }, []);
 
   // Fetch restaurants for map on mount
   useEffect(() => {
@@ -249,8 +267,11 @@ export default function Home() {
         ) : (
           <GoogleMapView
             apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}
+            center={userLocation}
+            userLocation={userLocation}
             selectedLocation={selectedLocation}
             restaurants={restaurants}
+            showRecenterButton={true}
           />
         )}
 

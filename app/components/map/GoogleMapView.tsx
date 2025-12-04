@@ -17,25 +17,41 @@ interface Restaurant {
 
 interface GoogleMapViewProps {
   restaurants?: Restaurant[];
-  center?: { lat: number; lng: number };
+  center?: { lat: number; lng: number } | null;
   apiKey: string;
   selectedLocation?: { lat: number; lng: number; id: string } | null;
+  userLocation?: { lat: number; lng: number } | null;
+  showRecenterButton?: boolean;
 }
+
+const DEFAULT_CENTER = { lat: 40.7549, lng: -73.9840 };
 
 export function GoogleMapView({
   restaurants = [],
-  center = { lat: 40.7549, lng: -73.9840 },
+  center,
   apiKey,
   selectedLocation,
+  userLocation,
+  showRecenterButton = false,
 }: GoogleMapViewProps) {
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
-  const [mapCenter, setMapCenter] = useState(center);
+  // Only used for overrides (selected location, recenter)
+  const [centerOverride, setCenterOverride] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Compute effective center: override > selectedLocation > center prop > default
+  const mapCenter = centerOverride 
+    || (selectedLocation ? { lat: selectedLocation.lat, lng: selectedLocation.lng } : null)
+    || center 
+    || DEFAULT_CENTER;
+
+  // Debug logging
+  console.log("[GoogleMapView] Props:", { center, userLocation, apiKey: apiKey ? "present" : "missing" });
+  console.log("[GoogleMapView] Computed mapCenter:", mapCenter);
 
   // Handle selected location from search
   useEffect(() => {
     if (selectedLocation) {
-      setMapCenter({ lat: selectedLocation.lat, lng: selectedLocation.lng });
-      // Find and select the restaurant if it matches
+      setCenterOverride({ lat: selectedLocation.lat, lng: selectedLocation.lng });
       const restaurant = restaurants.find(r => r.id === selectedLocation.id);
       if (restaurant) {
         setSelectedRestaurant(restaurant);
@@ -43,22 +59,53 @@ export function GoogleMapView({
     }
   }, [selectedLocation, restaurants]);
 
+  // Clear override when center prop changes (e.g., user location fetched)
+  useEffect(() => {
+    if (center) {
+      setCenterOverride(null);
+    }
+  }, [center?.lat, center?.lng]);
+
+  // Recenter to user location
+  const handleRecenter = () => {
+    if (userLocation) {
+      setCenterOverride({ lat: userLocation.lat, lng: userLocation.lng });
+    }
+  };
+
   // If no API key, show placeholder map
   if (!apiKey) {
-    return <PlaceholderMap restaurants={restaurants} selectedLocation={selectedLocation} />;
+    return (
+      <PlaceholderMap
+        restaurants={restaurants}
+        selectedLocation={selectedLocation}
+        userLocation={userLocation}
+        showRecenterButton={showRecenterButton}
+      />
+    );
   }
 
   return (
     <APIProvider apiKey={apiKey}>
       <Map
         center={mapCenter}
-        defaultZoom={14}
-        zoom={selectedLocation ? 16 : 14}
+        defaultZoom={15}
+        zoom={selectedLocation ? 16 : 15}
         mapId="tmap-main"
         className="w-full h-full"
         disableDefaultUI
         gestureHandling="greedy"
       >
+        {/* User location marker */}
+        {userLocation && (
+          <AdvancedMarker position={userLocation}>
+            <div className="relative">
+              <div className="w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-lg" />
+              <div className="absolute inset-0 w-4 h-4 bg-blue-500 rounded-full animate-ping opacity-75" />
+            </div>
+          </AdvancedMarker>
+        )}
+
         {restaurants.map((restaurant) => (
           <AdvancedMarker
             key={restaurant.id}
@@ -82,6 +129,19 @@ export function GoogleMapView({
           </AdvancedMarker>
         ))}
       </Map>
+
+      {/* Recenter button */}
+      {showRecenterButton && userLocation && (
+        <button
+          onClick={handleRecenter}
+          className="absolute bottom-4 left-4 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-10"
+          aria-label="Center on my location"
+        >
+          <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
+          </svg>
+        </button>
+      )}
 
       {/* Selected restaurant popup */}
       {selectedRestaurant && (
@@ -124,10 +184,14 @@ export function GoogleMapView({
 // Placeholder map when no API key is provided
 function PlaceholderMap({
   restaurants,
-  selectedLocation
+  selectedLocation,
+  userLocation,
+  showRecenterButton,
 }: {
   restaurants: Restaurant[];
   selectedLocation?: { lat: number; lng: number; id: string } | null;
+  userLocation?: { lat: number; lng: number } | null;
+  showRecenterButton?: boolean;
 }) {
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
 
@@ -197,17 +261,36 @@ function PlaceholderMap({
       })}
 
       {/* User location */}
-      <div
-        className="absolute z-10"
-        style={{ left: "50%", top: "50%" }}
-      >
-        <div className="w-4 h-4 bg-[var(--primary-dark)] rounded-full animate-pulse ring-4 ring-[var(--primary)]" />
-      </div>
+      {userLocation && (
+        <div
+          className="absolute z-10 -translate-x-1/2 -translate-y-1/2"
+          style={{ left: "50%", top: "50%" }}
+        >
+          <div className="relative">
+            <div className="w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-lg" />
+            <div className="absolute inset-0 w-4 h-4 bg-blue-500 rounded-full animate-ping opacity-75" />
+          </div>
+        </div>
+      )}
+
+      {/* Recenter button */}
+      {showRecenterButton && userLocation && (
+        <button
+          className="absolute bottom-4 left-4 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-10"
+          aria-label="Center on my location"
+        >
+          <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
+          </svg>
+        </button>
+      )}
 
       {/* Map attribution */}
-      <div className="absolute bottom-4 left-4 bg-white/80 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-gray-600">
-        Add Google Maps API key to enable real maps
-      </div>
+      {!showRecenterButton && (
+        <div className="absolute bottom-4 left-4 bg-white/80 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-gray-600">
+          Add Google Maps API key to enable real maps
+        </div>
+      )}
 
       {/* Selected restaurant popup */}
       {selectedRestaurant && (
