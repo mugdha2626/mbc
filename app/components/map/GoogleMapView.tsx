@@ -22,6 +22,7 @@ interface GoogleMapViewProps {
   selectedLocation?: { lat: number; lng: number; id: string } | null;
   userLocation?: { lat: number; lng: number } | null;
   showRecenterButton?: boolean;
+  defaultZoom?: number;
 }
 
 const DEFAULT_CENTER = { lat: 40.7549, lng: -73.9840 };
@@ -33,6 +34,7 @@ export function GoogleMapView({
   selectedLocation,
   userLocation,
   showRecenterButton = false,
+  defaultZoom = 15,
 }: GoogleMapViewProps) {
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
   // Track the initial center (set once when center prop first becomes available)
@@ -93,7 +95,7 @@ export function GoogleMapView({
       <Map
         defaultCenter={mapCenter}
         center={flyToCenter || undefined}
-        defaultZoom={15}
+        defaultZoom={defaultZoom}
         mapId="tmap-main"
         className="w-full h-full"
         disableDefaultUI
@@ -137,7 +139,7 @@ export function GoogleMapView({
       {showRecenterButton && userLocation && (
         <button
           onClick={handleRecenter}
-          className="absolute bottom-20 left-4 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-20"
+          className="absolute bottom-3 left-3 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-20"
           aria-label="Center on my location"
           title="Center on my location"
         >
@@ -280,7 +282,7 @@ function PlaceholderMap({
       {/* Recenter button */}
       {showRecenterButton && userLocation && (
         <button
-          className="absolute bottom-20 left-4 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-20"
+          className="absolute bottom-3 left-3 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-20"
           aria-label="Center on my location"
           title="Center on my location"
         >

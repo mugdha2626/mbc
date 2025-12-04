@@ -430,7 +430,7 @@ export default function CreatePage() {
       case "complete":
         return "Complete!";
       default:
-        return "Create Token";
+        return "Create Stamp";
     }
   };
 
@@ -477,7 +477,7 @@ export default function CreatePage() {
             </svg>
           </button>
           <h1 className="text-lg font-semibold text-gray-900">
-            Create Dish Token
+            Create Dish Stamp
           </h1>
         </div>
       </header>
@@ -544,7 +544,7 @@ export default function CreatePage() {
                 Find the Restaurant
               </h2>
               <p className="text-sm text-gray-500 mb-4">
-                Search for the restaurant where you want to create a dish token.
+                Search for the restaurant where you want to create a dish Stamp.
               </p>
 
               <div className="flex gap-2">
@@ -659,7 +659,7 @@ export default function CreatePage() {
               <p className="text-gray-500 max-w-xs mx-auto">
                 You must be at{" "}
                 <span className="font-medium">{selectedRestaurant.name}</span>{" "}
-                to create a dish token.
+                to create a dish Stamp.
               </p>
             </div>
 
@@ -852,7 +852,7 @@ export default function CreatePage() {
           <div className="space-y-6">
             <div className="bg-white border border-gray-200 rounded-2xl p-6">
               <h3 className="font-semibold text-gray-900 mb-4">
-                Review Your Token
+                Review Your Stamp
               </h3>
 
               <div className="space-y-4">
@@ -936,7 +936,7 @@ export default function CreatePage() {
                   {getButtonText()}
                 </>
               ) : (
-                "Create Token"
+                "Create Stamp"
               )}
             </button>
           </div>

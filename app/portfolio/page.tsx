@@ -72,11 +72,11 @@ export default function PortfolioPage() {
           <div className="flex gap-6">
             <div>
               <p className="text-2xl font-semibold text-gray-900">{portfolioStats.tokensOwned}</p>
-              <p className="text-xs text-gray-500">Tokens Owned</p>
+              <p className="text-xs text-gray-500">Stamps Owned</p>
             </div>
             <div>
               <p className="text-2xl font-semibold text-gray-900">{portfolioStats.tokensCreated}</p>
-              <p className="text-xs text-gray-500">Tokens Created</p>
+              <p className="text-xs text-gray-500">Stamps Created</p>
             </div>
           </div>
         </div>
@@ -99,7 +99,7 @@ export default function PortfolioPage() {
                     <div className="flex items-start justify-between">
                       <div>
                         <h3 className="font-medium text-gray-900">{holding.name}</h3>
-                        <p className="text-sm text-gray-500">{holding.amount} tokens</p>
+                        <p className="text-sm text-gray-500">{holding.amount} Stamps</p>
                       </div>
                       <div className="text-right">
                         <p className="font-semibold text-gray-900">${holding.value.toFixed(2)}</p>
@@ -120,7 +120,7 @@ export default function PortfolioPage() {
 
       {/* Created Tokens */}
       <div className="px-4">
-        <h2 className="text-lg font-semibold mb-3 text-gray-900">Tokens You Created</h2>
+        <h2 className="text-lg font-semibold mb-3 text-gray-900">Stamps You Created</h2>
         <div className="space-y-3">
           {createdTokens.map((token) => (
             <Link key={token.id} href={`/dish/${token.id}`}>

@@ -1,19 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { BottomNav } from "@/app/components/layout/BottomNav";
-import { BackedDishCard } from "@/app/components/cards/BackedDishCard";
-import { MiniTasteMap } from "@/app/components/map/MiniTasteMap";
+import { GoogleMapView } from "@/app/components/map/GoogleMapView";
+import { getCurrentPosition } from "@/lib/geo";
 import getFid from "@/app/providers/Fid";
 import type { User } from "@/app/interface";
 
-// Mock taste spots for now (would come from user's dish locations later)
-const tasteSpots = [
-  { id: "1", image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200", x: 25, y: 35 },
-  { id: "2", image: "https://images.unsplash.com/photo-1454496522488-7a8e488e8606?w=200", x: 45, y: 50 },
-  { id: "3", image: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=200", x: 65, y: 45 },
-  { id: "4", image: "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=200", x: 30, y: 70 },
-];
+interface MapRestaurant {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  image: string;
+  address: string;
+  city: string;
+  dishCount: number;
+  tmapRating: number;
+}
 
 // Helper to format currency
 function formatCurrency(value: number): string {
@@ -41,6 +45,12 @@ export default function ProfilePage() {
     username?: string;
     pfpUrl?: string;
   } | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [backedRestaurants, setBackedRestaurants] = useState<MapRestaurant[]>([]);
+  const [availableCities, setAvailableCities] = useState<string[]>([]);
+  const [selectedCity, setSelectedCity] = useState<string | null>(null);
+  const [showCityPicker, setShowCityPicker] = useState(false);
+  const [currentLocationCity, setCurrentLocationCity] = useState<string>("Loading...");
 
   useEffect(() => {
     const loadUser = async () => {
@@ -68,6 +78,14 @@ export default function ProfilePage() {
           const data = await res.json();
           setUser(data.user);
         }
+
+        // Fetch backed restaurants
+        const restaurantsRes = await fetch(`/api/users/${fid}/restaurants`);
+        if (restaurantsRes.ok) {
+          const restaurantsData = await restaurantsRes.json();
+          setBackedRestaurants(restaurantsData.restaurants || []);
+          setAvailableCities(restaurantsData.cities || []);
+        }
       } catch (err) {
         console.error("Failed to load user:", err);
       } finally {
@@ -77,6 +95,57 @@ export default function ProfilePage() {
 
     loadUser();
   }, []);
+
+  // Get user's current location
+  useEffect(() => {
+    getCurrentPosition()
+      .then(async (pos) => {
+        const location = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        };
+        setUserLocation(location);
+
+        // Try to reverse geocode to get city name
+        try {
+          const response = await fetch(
+            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${location.lat},${location.lng}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&result_type=locality`
+          );
+          const data = await response.json();
+          if (data.results?.[0]?.formatted_address) {
+            const city = data.results[0].address_components?.find(
+              (c: { types: string[] }) => c.types.includes("locality")
+            )?.long_name;
+            setCurrentLocationCity(city || data.results[0].formatted_address.split(",")[0]);
+          } else {
+            setCurrentLocationCity("Your Location");
+          }
+        } catch {
+          setCurrentLocationCity("Your Location");
+        }
+      })
+      .catch(() => {
+        setCurrentLocationCity("Location unavailable");
+      });
+  }, []);
+
+  // Filter restaurants by selected city
+  const filteredRestaurants = useMemo(() => {
+    if (!selectedCity) return backedRestaurants;
+    return backedRestaurants.filter(r => r.city === selectedCity);
+  }, [backedRestaurants, selectedCity]);
+
+  // Get map center based on selected city's restaurants or user location
+  const mapCenter = useMemo(() => {
+    if (selectedCity && filteredRestaurants.length > 0) {
+      // Center on the first restaurant in the selected city
+      return { lat: filteredRestaurants[0].lat, lng: filteredRestaurants[0].lng };
+    }
+    return userLocation;
+  }, [selectedCity, filteredRestaurants, userLocation]);
+
+  // Display name for location
+  const displayLocation = selectedCity || currentLocationCity;
 
   // Calculate return percentage
   const returnPercentage = user?.portfolio.totalInvested
@@ -203,7 +272,7 @@ export default function ProfilePage() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
-              DISHES BACKED
+              STAMPS
             </div>
             <p className="text-xl font-bold text-gray-900">
               {user?.portfolio.dishes.length || 0}
@@ -222,15 +291,86 @@ export default function ProfilePage() {
             <h2 className="text-lg font-semibold text-gray-900">Your Taste Map</h2>
           </div>
           <span className="text-sm font-medium text-primary-dark">
-            {user?.portfolio.dishes.length || 0} Spots
+            {filteredRestaurants.length} {filteredRestaurants.length === 1 ? "Spot" : "Spots"}
           </span>
         </div>
-        <MiniTasteMap spots={tasteSpots} location="New York" />
+        
+        {/* Map Container */}
+        <div className="relative h-52 rounded-2xl overflow-hidden shadow-sm">
+          <GoogleMapView
+            apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}
+            center={mapCenter}
+            userLocation={userLocation}
+            showRecenterButton={!selectedCity}
+            restaurants={filteredRestaurants}
+            defaultZoom={13}
+          />
+          
+          {/* Location label with city picker */}
+          <div className="absolute bottom-3 right-3 z-10">
+            <button
+              onClick={() => setShowCityPicker(!showCityPicker)}
+              className="bg-white/90 backdrop-blur-sm rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 flex items-center gap-1.5 hover:bg-white transition-colors shadow-sm"
+            >
+              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              {displayLocation}
+              {availableCities.length > 0 && (
+                <svg className={`w-4 h-4 text-gray-400 transition-transform ${showCityPicker ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              )}
+            </button>
+
+            {/* City Picker Dropdown */}
+            {showCityPicker && availableCities.length > 0 && (
+              <div className="absolute bottom-full right-0 mb-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 min-w-[160px] max-h-48 overflow-y-auto">
+                <button
+                  onClick={() => {
+                    setSelectedCity(null);
+                    setShowCityPicker(false);
+                  }}
+                  className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${!selectedCity ? 'text-primary-dark font-medium' : 'text-gray-700'}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
+                  </svg>
+                  Current Location
+                  {!selectedCity && (
+                    <svg className="w-4 h-4 ml-auto text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </button>
+                <div className="border-t border-gray-100 my-1" />
+                {availableCities.map((city) => (
+                  <button
+                    key={city}
+                    onClick={() => {
+                      setSelectedCity(city);
+                      setShowCityPicker(false);
+                    }}
+                    className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${selectedCity === city ? 'text-primary-dark font-medium' : 'text-gray-700'}`}
+                  >
+                    {city}
+                    {selectedCity === city && (
+                      <svg className="w-4 h-4 text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Backed Dishes Section */}
+      {/* Stamps Section */}
       <div className="px-4">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Backed Dishes</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Stamps</h2>
 
         {user?.portfolio.dishes && user.portfolio.dishes.length > 0 ? (
           <div className="space-y-3">
@@ -245,7 +385,7 @@ export default function ProfilePage() {
                       Dish #{index + 1}
                     </p>
                     <p className="text-sm text-gray-500">
-                      {holding.quantity} tokens
+                      {holding.quantity} Stamps
                     </p>
                   </div>
                   <div className="text-right">
@@ -269,7 +409,7 @@ export default function ProfilePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
             </div>
-            <p className="text-gray-500 mb-4">No dishes backed yet</p>
+            <p className="text-gray-500 mb-4">No Stamps yet</p>
             <a
               href="/explore"
               className="inline-block btn-primary px-6 py-2 rounded-xl text-sm font-medium"

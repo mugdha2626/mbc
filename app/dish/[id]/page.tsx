@@ -1,7 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+
+import { useFarcaster } from "@/app/providers/FarcasterProvider";
+import { useReferral } from "@/app/hooks/useReferral";
 
 // Mock data
 const dish = {
@@ -30,9 +34,42 @@ const dish = {
 
 export default function DishPage() {
   const router = useRouter();
+  const { user } = useFarcaster();
+  const { referrerFid } = useReferral();
   const [backAmount, setBackAmount] = useState(1);
+  const [isWishlisted, setIsWishlisted] = useState(false);
 
   const totalCost = (dish.currentPrice * backAmount).toFixed(2);
+
+  const handleAddToWishlist = async () => {
+    if (!user) return;
+
+    try {
+      const endpoint = "/api/wishlist";
+      const method = isWishlisted ? "DELETE" : "POST";
+
+      await fetch(endpoint, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fid: user.fid,
+          dishId: dish.id,
+          referrer: referrerFid,
+        }),
+      });
+
+      setIsWishlisted(!isWishlisted);
+    } catch (error) {
+      console.error("Failed to update wishlist", error);
+    }
+  };
+
+  const handleShare = () => {
+    if (!user) return;
+    const url = `${window.location.origin}/dish/${dish.id}?ref=${user.fid}`;
+    navigator.clipboard.writeText(url);
+    alert("Referral link copied to clipboard!");
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -43,7 +80,7 @@ export default function DishPage() {
           alt={dish.name}
           className="w-full h-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+        <div className="absolute inset-0 bg-linear-to-t from-black/70 via-black/20 to-transparent" />
 
         {/* Back button */}
         <button
@@ -55,22 +92,41 @@ export default function DishPage() {
           </svg>
         </button>
 
-        {/* Share button */}
-        <button className="absolute top-4 right-4 p-2 rounded-full bg-white/90 backdrop-blur-sm hover:bg-white transition-colors shadow-sm">
-          <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-          </svg>
-        </button>
+        {/* Action buttons */}
+        <div className="absolute top-4 right-4 flex gap-2">
+          {/* Wishlist button */}
+          <button
+            onClick={handleAddToWishlist}
+            className={`p-2 rounded-full backdrop-blur-sm transition-colors shadow-sm ${isWishlisted
+                ? "bg-red-500 text-white hover:bg-red-600"
+                : "bg-white/90 hover:bg-white text-gray-700"
+              }`}
+          >
+            <svg className="w-5 h-5" fill={isWishlisted ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+            </svg>
+          </button>
+
+          {/* Share button */}
+          <button
+            onClick={handleShare}
+            className="p-2 rounded-full bg-white/90 backdrop-blur-sm hover:bg-white transition-colors shadow-sm"
+          >
+            <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+            </svg>
+          </button>
+        </div>
 
         {/* Dish name overlay */}
-        <div className="absolute bottom-4 left-4 right-4">
+        <div className="absolute bottom-8 left-4 right-4">
           <h1 className="text-2xl font-bold text-white">{dish.name}</h1>
         </div>
       </div>
 
       {/* Content */}
       <div className="bg-white rounded-t-3xl -mt-4 relative">
-        <div className="px-4 py-6">
+        <div className="px-4 py-4">
           {/* Restaurant & Creator Info */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -86,7 +142,12 @@ export default function DishPage() {
             </div>
             <div className="text-right">
               <p className="text-sm text-gray-500">Created by</p>
-              <p className="text-sm font-medium text-primary-dark">@{dish.creator.username}</p>
+              <Link
+                href={`/profile?username=${encodeURIComponent(dish.creator.username)}`}
+                className="inline-block text-sm font-medium text-primary-dark hover:underline"
+              >
+                @{dish.creator.username}
+              </Link>
             </div>
           </div>
 
@@ -124,7 +185,7 @@ export default function DishPage() {
             </div>
             <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
                 <span className="font-medium text-green-600">Up {dish.weeklyChange}% this week</span>
               </div>
               <div className="flex items-end gap-0.5 h-8">
@@ -145,7 +206,7 @@ export default function DishPage() {
               <h3 className="font-semibold text-gray-900 mb-2">Your Holdings</h3>
               <div className="flex justify-between items-center">
                 <div>
-                  <p className="text-sm text-gray-500">{dish.yourHolding} tokens</p>
+                  <p className="text-sm text-gray-500">{dish.yourHolding} Stamps</p>
                   <p className="text-lg font-bold text-primary-dark">${dish.yourValue.toFixed(2)}</p>
                 </div>
                 <button className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50">
@@ -167,7 +228,7 @@ export default function DishPage() {
               </button>
               <div className="flex-1 text-center">
                 <p className="text-3xl font-bold text-gray-900">{backAmount}</p>
-                <p className="text-sm text-gray-500">tokens</p>
+                <p className="text-sm text-gray-500">Stamps</p>
               </div>
               <button
                 onClick={() => setBackAmount(backAmount + 1)}
@@ -183,11 +244,14 @@ export default function DishPage() {
           </div>
 
           {/* Share Referral */}
-          <button className="btn-dashed flex items-center justify-center gap-2">
+          <button
+            onClick={handleShare}
+            className="btn-dashed w-full flex items-center justify-center gap-2"
+          >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
             </svg>
-            Share referral & earn 5%
+            Share referral & earn 2.5%
           </button>
         </div>
       </div>
