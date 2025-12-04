@@ -165,18 +165,49 @@ export default function DishPage() {
 
   // Watch mint status
   useEffect(() => {
+    const updateDatabaseAfterMint = async () => {
+      if (!user || !address || !dishId) return;
+
+      try {
+        // Update the database with the new mint data
+        await fetch("/api/dish/mint", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dishId,
+            minterFid: user.fid,
+            minterAddress: address,
+            usdcAmount: backAmount, // Amount in USDC
+            tokensReceived: backAmount, // 1 USDC = 1 token for simplicity
+            referrerFid: referrerFid || null,
+          }),
+        });
+      } catch (error) {
+        console.error("Failed to update database after mint:", error);
+      }
+    };
+
     if (mintStatus?.status === "success") {
       setMintStep("complete");
-      setTimeout(() => {
-        router.refresh();
-        setMintStep("idle");
-        resetMint();
-      }, 2000);
+      // Update DB then refresh
+      updateDatabaseAfterMint().then(() => {
+        setTimeout(() => {
+          router.refresh();
+          // Re-fetch dish data to show updated values
+          fetch(`/api/dish/${dishId}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.dish) setDish(data.dish);
+            });
+          setMintStep("idle");
+          resetMint();
+        }, 1500);
+      });
     } else if (mintStatus?.status === "failure") {
       setMintError("Transaction failed. Please try again.");
       setMintStep("idle");
     }
-  }, [mintStatus, router, resetMint]);
+  }, [mintStatus, router, resetMint, user, address, dishId, backAmount, referrerFid]);
 
   // Handle mint error
   useEffect(() => {

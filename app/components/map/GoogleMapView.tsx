@@ -42,10 +42,12 @@ export function GoogleMapView({
   // For programmatic moves (recenter button, selecting location) - cleared after use
   const [flyToCenter, setFlyToCenter] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Set initial center once when center prop becomes available
+  // Set initial center once when center prop becomes available, and fly to it
   useEffect(() => {
     if (center && !initialCenter) {
       setInitialCenter(center);
+      // Fly to the center when it first becomes available (e.g., user location loaded)
+      setFlyToCenter(center);
     }
   }, [center, initialCenter]);
 
@@ -120,7 +122,7 @@ export function GoogleMapView({
             <div className={`relative cursor-pointer transform transition-transform hover:scale-110 ${selectedRestaurant?.id === restaurant.id ? "scale-110" : ""}`}>
               <div className="w-12 h-12 rounded-full overflow-hidden border-3 border-white shadow-lg">
                 <img
-                  src={restaurant.image}
+                  src={restaurant.image || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400"}
                   alt={restaurant.name}
                   className="w-full h-full object-cover"
                 />
@@ -156,7 +158,7 @@ export function GoogleMapView({
             <div className="flex gap-3">
               <div className="relative">
                 <img
-                  src={selectedRestaurant.image}
+                  src={selectedRestaurant.image || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400"}
                   alt={selectedRestaurant.name}
                   className="w-16 h-16 rounded-xl object-cover"
                 />
@@ -251,7 +253,7 @@ function PlaceholderMap({
             <div className={`relative ${selectedRestaurant?.id === restaurant.id ? "scale-110" : ""}`}>
               <div className="w-14 h-14 rounded-full overflow-hidden border-3 border-white shadow-lg">
                 <img
-                  src={restaurant.image}
+                  src={restaurant.image || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400"}
                   alt={restaurant.name}
                   className="w-full h-full object-cover"
                 />
@@ -306,7 +308,7 @@ function PlaceholderMap({
             <div className="flex gap-3">
               <div className="relative">
                 <img
-                  src={selectedRestaurant.image}
+                  src={selectedRestaurant.image || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400"}
                   alt={selectedRestaurant.name}
                   className="w-16 h-16 rounded-xl object-cover"
                 />

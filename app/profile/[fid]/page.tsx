@@ -209,7 +209,7 @@ export default function UserProfilePage() {
             {createdDishes.map((dish) => (
               <Link key={dish.tokenAdrress} href={`/dish/${dish.tokenAdrress}`}>
                 <div className="bg-white rounded-2xl p-4 border border-gray-100 flex items-center gap-3 relative group">
-                  <img src={dish.image} alt={dish.name} className="w-14 h-14 rounded-xl object-cover" />
+                  <img src={dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400"} alt={dish.name} className="w-14 h-14 rounded-xl object-cover" />
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">{dish.name}</p>
                     <p className="text-sm text-gray-500">{dish.totalHolders} holders</p>
