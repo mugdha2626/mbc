@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { BottomNav } from "./components/layout/BottomNav";
 import { GoogleMapView } from "./components/map/GoogleMapView";
 import { getCurrentPosition } from "@/lib/geo";
+import { Dish } from "./interface";
 
 interface SearchResult {
   id: string;
@@ -135,8 +136,8 @@ export default function Home() {
         if (data.dishes) {
           data.dishes.forEach((d: any) => {
             results.push({
-              id: d.tokenAdrress || d._id,
-              name: d.name,
+              id: d.dishId,
+              name: d.name || d.dishId,
               type: "dish",
               subtitle: d.restaurantName || "",
               lat: d.restaurantLat,
@@ -188,6 +189,20 @@ export default function Home() {
     if (result.type === "user" && result.fid) {
       // Navigate to user profile
       router.push(`/profile/${result.fid}`);
+      setShowResults(false);
+      return;
+    }
+
+    if (result.type === "dish") {
+      // Navigate to dish detail page
+      router.push(`/dish/${result.id}`);
+      setShowResults(false);
+      return;
+    }
+
+    if (result.type === "restaurant") {
+      // Navigate to restaurant page
+      router.push(`/restaurant/${result.id}`);
       setShowResults(false);
       return;
     }

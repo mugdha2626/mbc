@@ -88,7 +88,17 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const body: SaveDishRequest = await request.json();
+    let body: SaveDishRequest;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON in request body" },
+        { status: 400 }
+      );
+    }
+
+    console.log("Saving dish with data:", JSON.stringify(body, null, 2));
 
     // Validate required fields
     if (!body.name || !body.name.trim()) {
@@ -221,6 +231,11 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("Error saving dish:", error);
-    return NextResponse.json({ error: "Failed to save dish" }, { status: 500 });
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json(
+      { error: `Failed to save dish: ${errorMessage}` },
+      { status: 500 }
+    );
   }
 }
