@@ -134,14 +134,14 @@ export default function Home() {
 
         // Add dishes
         if (data.dishes) {
-          data.dishes.forEach((d: Dish) => {
+          data.dishes.forEach((d: any) => {
             results.push({
               id: d.dishId,
-              name: d.dishId,
+              name: d.name || d.dishId,
               type: "dish",
-              subtitle: d.restaurant || "",
-              lat: d.restaurant.latitude,
-              lng: d.restaurant.longitude,
+              subtitle: d.restaurantName || "",
+              lat: d.restaurantLat,
+              lng: d.restaurantLng,
             });
           });
         }
@@ -189,6 +189,20 @@ export default function Home() {
     if (result.type === "user" && result.fid) {
       // Navigate to user profile
       router.push(`/profile/${result.fid}`);
+      setShowResults(false);
+      return;
+    }
+
+    if (result.type === "dish") {
+      // Navigate to dish detail page
+      router.push(`/dish/${result.id}`);
+      setShowResults(false);
+      return;
+    }
+
+    if (result.type === "restaurant") {
+      // Navigate to restaurant page
+      router.push(`/restaurant/${result.id}`);
       setShowResults(false);
       return;
     }
