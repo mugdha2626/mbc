@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { BottomNav } from "@/app/components/layout/BottomNav";
 import { useFarcaster } from "@/app/providers/FarcasterProvider";
+import { calculateUserTier } from "@/lib/tiers";
 
 interface UserData {
   fid: number;
@@ -214,6 +215,16 @@ export default function UserProfilePage() {
     return holdings.reduce((sum, holding) => sum + holding.totalValue, 0);
   }, [holdings]);
 
+  // Calculate user tier based on achievements
+  const userTier = useMemo(() => {
+    const dishesBacked = user?.portfolio?.dishes?.length || 0;
+    const dishesCreated = createdDishes.length;
+    const portfolioValue = calculatedPortfolioValue;
+    const reputationScore = user?.reputationScore || 0;
+    
+    return calculateUserTier(dishesBacked, dishesCreated, portfolioValue, reputationScore);
+  }, [user?.portfolio?.dishes?.length, createdDishes.length, calculatedPortfolioValue, user?.reputationScore]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -270,13 +281,9 @@ export default function UserProfilePage() {
             <h2 className="text-xl font-bold text-gray-900">{user.displayName || user.username}</h2>
             <p className="text-gray-500">@{user.username}</p>
             <div className="flex gap-2 mt-2 flex-wrap">
-              {user.badges?.length > 0 ? (
-                user.badges.map((badge, i) => (
-                  <span key={i} className={`badge ${i === 0 ? "badge-yellow" : "badge-gray"}`}>{badge}</span>
-                ))
-              ) : (
-                <span className="badge badge-gray">NEW TASTER</span>
-              )}
+              <span className={`badge ${userTier.badgeClass}`}>
+                {userTier.name.toUpperCase()}
+              </span>
             </div>
           </div>
         </div>

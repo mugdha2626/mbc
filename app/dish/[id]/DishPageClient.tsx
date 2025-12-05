@@ -1030,7 +1030,7 @@ export default function DishPageClient() {
                 <p className="font-medium text-gray-900">
                   {dish.restaurantName}
                 </p>
-                <p className="text-sm text-gray-500">
+                <p className="text-xs text-gray-500">
                   {dish.restaurantAddress}
                 </p>
               </div>
@@ -1077,52 +1077,6 @@ export default function DishPageClient() {
                 <p className="text-lg font-semibold text-gray-900">
                   {dish.totalHolders || 0}
                 </p>
-              </div>
-            </div>
-            <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {(dish.dailyPriceChange ?? 0) >= 0 ? (
-                  <>
-                    <svg
-                      className="w-4 h-4 text-green-500"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                      />
-                    </svg>
-                    <span className="font-medium text-green-600">
-                      Up {dish.dailyPriceChange || 0}% today
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <svg
-                      className="w-4 h-4 text-red-500"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M13 17h8m0 0v-8m0 8l-8-8-4 4-6-6"
-                      />
-                    </svg>
-                    <span className="font-medium text-red-600">
-                      Down {Math.abs(dish.dailyPriceChange ?? 0)}% today
-                    </span>
-                  </>
-                )}
-              </div>
-              <div className="text-sm text-gray-500">
-                Supply: {dish.currentSupply || 0}
               </div>
             </div>
           </div>

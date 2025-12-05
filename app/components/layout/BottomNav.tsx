@@ -74,7 +74,7 @@ const NavItem = ({
     <div className={`relative z-10 transition-all duration-300 ${
       active 
         ? "text-[var(--primary-dark)] scale-110" 
-        : "text-[var(--muted)] group-hover:text-[var(--primary-text)] group-hover:scale-105 group-active:scale-95"
+        : "text-gray-800 group-hover:text-gray-900 group-hover:scale-105 group-active:scale-95"
     }`}>
       {children}
     </div>
@@ -83,7 +83,7 @@ const NavItem = ({
     <span className={`relative z-10 text-[10px] font-semibold mt-1 transition-all duration-300 ${
       active 
         ? "text-[var(--primary-dark)] opacity-100" 
-        : "text-[var(--muted)] opacity-70 group-hover:opacity-100"
+        : "text-gray-800 opacity-90 group-hover:opacity-100"
     }`}>
       {label}
     </span>
@@ -146,7 +146,7 @@ export function BottomNav() {
                   </div>
                 </Link>
                 {/* Label */}
-                <span className="text-[10px] font-semibold text-[var(--primary-text)] mt-1">
+                <span className="text-[10px] font-semibold text-gray-900 mt-1">
                   Create
                 </span>
               </div>

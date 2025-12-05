@@ -7,6 +7,7 @@ import { GoogleMapView } from "@/app/components/map/GoogleMapView";
 import { getCurrentPosition } from "@/lib/geo";
 import getFid from "@/app/providers/Fid";
 import type { User } from "@/app/interface";
+import { calculateUserTier } from "@/lib/tiers";
 
 interface MapRestaurant {
   id: string;
@@ -351,6 +352,16 @@ export default function ProfilePage() {
     return holdings.reduce((sum, holding) => sum + holding.totalValue, 0);
   }, [holdings]);
 
+  // Calculate user tier based on achievements
+  const userTier = useMemo(() => {
+    const dishesBacked = user?.portfolio?.dishes?.length || 0;
+    const dishesCreated = createdDishes.length;
+    const portfolioValue = calculatedPortfolioValue;
+    const reputationScore = user?.reputationScore || 0;
+    
+    return calculateUserTier(dishesBacked, dishesCreated, portfolioValue, reputationScore);
+  }, [user?.portfolio?.dishes?.length, createdDishes.length, calculatedPortfolioValue, user?.reputationScore]);
+
   // Calculate return percentage based on calculated value vs invested
   const returnPercentage =
     user?.portfolio.totalInvested && user.portfolio.totalInvested > 0
@@ -430,20 +441,9 @@ export default function ProfilePage() {
                 @{farcasterUser?.username || user?.username || "user"}
               </p>
               <div className="flex gap-2 mt-2 flex-wrap">
-                {user?.badges && user.badges.length > 0 ? (
-                  user.badges.map((badge, index) => (
-                    <span
-                      key={index}
-                      className={`badge ${
-                        index === 0 ? "badge-yellow" : "badge-gray"
-                      }`}
-                    >
-                      {badge}
-                    </span>
-                  ))
-                ) : (
-                  <span className="badge badge-gray">NEW TASTER</span>
-                )}
+                <span className={`badge ${userTier.badgeClass}`}>
+                  {userTier.name.toUpperCase()}
+                </span>
               </div>
             </div>
           </div>
