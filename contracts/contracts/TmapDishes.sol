@@ -16,7 +16,7 @@ import "./libraries/BondingCurve.sol";
  * - Linear bonding curve: Price = supply * 0.0125 USDC
  * - $10 max spend per user per dish
  * - 70% refund rate on sells
- * - 2.5% referral fee + 2.5% holder rewards on each mint
+ * - 2.5% referral pool (claimable) + 2.5% holder rewards on each mint
  * - Time-weighted reward distribution for existing holders
  */
 contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
@@ -39,10 +39,12 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
     mapping(bytes32 => Dish) public dishes;
     mapping(bytes32 => mapping(address => uint256)) public userSpent;
     mapping(bytes32 => mapping(address => uint256)) private _balances;
+    mapping(bytes32 => uint256) public holderCounts;
 
     mapping(bytes32 => uint256) public rewardPerTokenStored;
     mapping(bytes32 => mapping(address => uint256)) public userRewardPerTokenPaid;
     mapping(bytes32 => mapping(address => uint256)) public pendingRewards;
+    mapping(address => uint256) public referralRewards;
 
     event DishCreated(
         bytes32 indexed dishId,
@@ -73,6 +75,8 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
         address indexed user,
         uint256 amount
     );
+
+    event ReferralRewardsClaimed(address indexed user, uint256 amount);
 
     event ProtocolFeeRecipientUpdated(address indexed newRecipient);
 
@@ -147,9 +151,12 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
             revert TransferFailed();
         }
 
-        address feeRecipient = referrer != address(0) ? referrer : protocolFeeRecipient;
-        if (!usdc.transfer(feeRecipient, referralFee)) {
-            revert TransferFailed();
+        if (referrer != address(0)) {
+            referralRewards[referrer] += referralFee;
+        } else {
+            if (!usdc.transfer(protocolFeeRecipient, referralFee)) {
+                revert TransferFailed();
+            }
         }
 
         if (dish.totalSupply > 0) {
@@ -220,6 +227,22 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
         }
 
         emit RewardsClaimed(dishId, msg.sender, reward);
+    }
+
+    /**
+     * @notice Claim accumulated referral rewards
+     */
+    function claimReferralRewards() external nonReentrant {
+        uint256 reward = referralRewards[msg.sender];
+        if (reward == 0) revert ZeroAmount();
+
+        referralRewards[msg.sender] = 0;
+
+        if (!usdc.transfer(msg.sender, reward)) {
+            revert TransferFailed();
+        }
+
+        emit ReferralRewardsClaimed(msg.sender, reward);
     }
 
     /**
@@ -298,6 +321,15 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
     }
 
     /**
+     * @notice Get pending referral rewards for a user
+     * @param user The user to query
+     * @return reward Pending referral rewards in USDC
+     */
+    function getReferralRewards(address user) external view returns (uint256 reward) {
+        return referralRewards[user];
+    }
+
+    /**
      * @notice Get user's token balance for a dish
      * @param user The user to query
      * @param dishId The dish to query
@@ -305,6 +337,15 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
      */
     function getBalance(address user, bytes32 dishId) external view returns (uint256) {
         return _balances[dishId][user];
+    }
+
+    /**
+     * @notice Get holder count for a dish
+     * @param dishId The dish to query
+     * @return count Number of unique holders
+     */
+    function getHolderCount(bytes32 dishId) external view returns (uint256 count) {
+        return holderCounts[dishId];
     }
 
     /**
@@ -414,15 +455,24 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
     ) internal virtual override {
         for (uint256 i = 0; i < ids.length; i++) {
             bytes32 dishId = bytes32(ids[i]);
+            uint256 amount = values[i];
 
             if (from != address(0)) {
                 _updateRewards(dishId, from);
-                _balances[dishId][from] -= values[i];
+                bool wasHolder = _balances[dishId][from] > 0;
+                _balances[dishId][from] -= amount;
+                if (wasHolder && _balances[dishId][from] == 0) {
+                    holderCounts[dishId] -= 1;
+                }
             }
 
             if (to != address(0)) {
                 _updateRewards(dishId, to);
-                _balances[dishId][to] += values[i];
+                bool wasHolder = _balances[dishId][to] > 0;
+                _balances[dishId][to] += amount;
+                if (!wasHolder && _balances[dishId][to] > 0) {
+                    holderCounts[dishId] += 1;
+                }
             }
         }
 
@@ -438,4 +488,3 @@ contract TmapDishes is ERC1155, Ownable, ReentrancyGuard {
         return dishes[dishId].metadata;
     }
 }
-

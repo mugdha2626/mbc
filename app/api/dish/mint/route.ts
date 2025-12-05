@@ -44,6 +44,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!TMAP_DISHES_ADDRESS) {
+      return NextResponse.json(
+        { error: "Contract address is not configured" },
+        { status: 500 }
+      );
+    }
+
     const db = await getDb();
     const now = new Date();
 
@@ -76,6 +83,14 @@ export async function POST(request: NextRequest) {
     });
     const marketCap = Number(marketCapResult) / 1_000_000; // Convert from 6 decimals
 
+    const holderCountResult = await publicClient.readContract({
+      address: TMAP_DISHES_ADDRESS,
+      abi: TMAP_DISHES_ABI,
+      functionName: "getHolderCount",
+      args: [dishId as Hash],
+    });
+    const totalHolders = Number(holderCountResult);
+
     // Check if user already has this dish in their portfolio (users.portfolio.dishes)
     const existingHolder = await db.collection("users").findOne({
       fid: minterFid,
@@ -98,6 +113,7 @@ export async function POST(request: NextRequest) {
       currentPrice,
       currentSupply: totalSupply,
       marketCap,
+      totalHolders,
       updatedAt: now,
     };
 
@@ -106,7 +122,6 @@ export async function POST(request: NextRequest) {
       $set: dishUpdate,
       $inc: {
         dailyVolume: usdcAmount,
-        ...(isNewHolder ? { totalHolders: 1 } : {}),
       },
     };
 
@@ -183,7 +198,7 @@ export async function POST(request: NextRequest) {
         dishId,
         currentPrice,
         currentSupply: totalSupply,
-        totalHolders: isNewHolder ? "incremented" : "unchanged",
+        totalHolders,
         marketCap,
       },
       isNewHolder,

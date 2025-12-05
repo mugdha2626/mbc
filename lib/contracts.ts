@@ -93,10 +93,24 @@ export const TMAP_DISHES_ABI = [
     outputs: [{ name: "", type: "uint256" }],
   },
   {
+    name: "getReferralRewards",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [{ name: "reward", type: "uint256" }],
+  },
+  {
     name: "claimRewards",
     type: "function",
     stateMutability: "nonpayable",
     inputs: [{ name: "dishId", type: "bytes32" }],
+    outputs: [],
+  },
+  {
+    name: "claimReferralRewards",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [],
     outputs: [],
   },
   {
@@ -108,6 +122,13 @@ export const TMAP_DISHES_ABI = [
       { name: "", type: "address" },
     ],
     outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "getHolderCount",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "dishId", type: "bytes32" }],
+    outputs: [{ name: "count", type: "uint256" }],
   },
 ] as const;
 

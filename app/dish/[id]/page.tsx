@@ -193,6 +193,25 @@ export default function DishPage() {
     fetchDish();
   }, [dishId]);
 
+  // Fetch live holder count from contract-backed endpoint
+  useEffect(() => {
+    if (!dishId) return;
+
+    const fetchHolders = async () => {
+      try {
+        const res = await fetch(`/api/dish/${encodeURIComponent(dishId)}/holders`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const holderCount = Number(data.holderCount || 0);
+        setDish((prev) => (prev ? { ...prev, totalHolders: holderCount } : prev));
+      } catch (err) {
+        console.error("Error fetching holder count:", err);
+      }
+    };
+
+    fetchHolders();
+  }, [dishId]);
+
   // Fetch on-chain price
   useEffect(() => {
     if (!dishId || !TMAP_DISHES_ADDRESS) return;

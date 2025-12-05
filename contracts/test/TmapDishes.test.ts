@@ -149,17 +149,27 @@ describe("TmapDishes", function () {
       expect(remaining).to.equal(parseUsdc(10) - actualCost);
     });
 
-    it("should distribute referral fee to referrer", async function () {
-      // Creator mints first to become eligible referrer
-      await tmapDishes.connect(creator).mint(DISH_ID, parseUsdc(1), ethers.ZeroAddress);
+    it("should accrue referral fee to referrer and allow claiming", async function () {
+      const [, actualCost] = await tmapDishes.getTokensForUsdc(DISH_ID, parseUsdc(1));
+      const expectedReferral = (actualCost * 250n) / 10000n;
 
       const referrerBalanceBefore = await usdc.balanceOf(creator.address);
 
       // Buyer mints with creator as referrer
       await tmapDishes.connect(buyer1).mint(DISH_ID, parseUsdc(1), creator.address);
 
+      const pendingReferral = await tmapDishes.getReferralRewards(creator.address);
+      expect(pendingReferral).to.equal(expectedReferral);
+
+      // Funds should not be sent immediately
+      const referrerBalanceAfterMint = await usdc.balanceOf(creator.address);
+      expect(referrerBalanceAfterMint).to.equal(referrerBalanceBefore);
+
+      const claimTx = await tmapDishes.connect(creator).claimReferralRewards();
+      await expect(claimTx).to.emit(tmapDishes, "ReferralRewardsClaimed").withArgs(creator.address, expectedReferral);
+
       const referrerBalanceAfter = await usdc.balanceOf(creator.address);
-      expect(referrerBalanceAfter).to.be.gt(referrerBalanceBefore);
+      expect(referrerBalanceAfter - referrerBalanceBefore).to.equal(expectedReferral);
     });
 
     it("should send referral fee to protocol if no referrer", async function () {
@@ -173,13 +183,18 @@ describe("TmapDishes", function () {
 
     it("should allow any address as referrer", async function () {
       // Any address can be a referrer, even if they don't hold tokens
+      const [, actualCost] = await tmapDishes.getTokensForUsdc(DISH_ID, parseUsdc(1));
+      const expectedReferral = (actualCost * 250n) / 10000n;
       const referrerBalanceBefore = await usdc.balanceOf(buyer2.address);
       
       await tmapDishes.connect(buyer1).mint(DISH_ID, parseUsdc(1), buyer2.address);
       
+      const pending = await tmapDishes.getReferralRewards(buyer2.address);
+      expect(pending).to.equal(expectedReferral);
+
+      await tmapDishes.connect(buyer2).claimReferralRewards();
       const referrerBalanceAfter = await usdc.balanceOf(buyer2.address);
-      // Referrer should receive the referral fee
-      expect(referrerBalanceAfter).to.be.gt(referrerBalanceBefore);
+      expect(referrerBalanceAfter - referrerBalanceBefore).to.equal(expectedReferral);
     });
   });
 
@@ -319,6 +334,32 @@ describe("TmapDishes", function () {
     });
   });
 
+  describe("Holder Tracking", function () {
+    beforeEach(async function () {
+      await tmapDishes.connect(creator).createDish(DISH_ID, METADATA);
+    });
+
+    it("should track holder counts across mint, sell, and transfer", async function () {
+      await tmapDishes.connect(buyer1).mint(DISH_ID, parseUsdc(2), ethers.ZeroAddress);
+      expect(await tmapDishes.getHolderCount(DISH_ID)).to.equal(1);
+
+      await tmapDishes.connect(buyer2).mint(DISH_ID, parseUsdc(2), ethers.ZeroAddress);
+      expect(await tmapDishes.getHolderCount(DISH_ID)).to.equal(2);
+
+      const balance1 = await tmapDishes.getBalance(buyer1.address, DISH_ID);
+      await tmapDishes.connect(buyer1).sell(DISH_ID, balance1);
+      expect(await tmapDishes.getHolderCount(DISH_ID)).to.equal(1);
+
+      const balance2 = await tmapDishes.getBalance(buyer2.address, DISH_ID);
+      const tokenId = BigInt(DISH_ID);
+      await tmapDishes
+        .connect(buyer2)
+        .safeTransferFrom(buyer2.address, buyer3.address, tokenId, balance2, "0x");
+
+      expect(await tmapDishes.getHolderCount(DISH_ID)).to.equal(1);
+    });
+  });
+
   describe("Admin Functions", function () {
     it("should update protocol fee recipient", async function () {
       await tmapDishes.setProtocolFeeRecipient(buyer1.address);
@@ -338,4 +379,3 @@ describe("TmapDishes", function () {
     return block!.timestamp;
   }
 });
-

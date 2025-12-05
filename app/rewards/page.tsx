@@ -21,6 +21,8 @@ const rewardsAbi = parseAbi([
   "function calculatePendingRewards(address user, bytes32 dishId) view returns (uint256)",
   "function claimRewards(bytes32 dishId)",
   "function getBalance(address user, bytes32 dishId) view returns (uint256)",
+  "function getReferralRewards(address user) view returns (uint256)",
+  "function claimReferralRewards()",
 ]);
 
 // Public client for reading
@@ -44,6 +46,8 @@ export default function RewardsPage() {
   const { user } = useFarcaster();
   const { address, isConnected } = useAccount();
   const [dishRewards, setDishRewards] = useState<DishReward[]>([]);
+  const [dishRewardsTotal, setDishRewardsTotal] = useState(0);
+  const [referralRewards, setReferralRewards] = useState(0);
   const [totalRewards, setTotalRewards] = useState(0);
   const [loading, setLoading] = useState(true);
   const [claimingDishId, setClaimingDishId] = useState<string | null>(null);
@@ -73,6 +77,10 @@ export default function RewardsPage() {
   // Fetch rewards data
   const fetchRewards = useCallback(async () => {
     if (!user?.fid || !address) {
+      setDishRewards([]);
+      setDishRewardsTotal(0);
+      setReferralRewards(0);
+      setTotalRewards(0);
       setLoading(false);
       return;
     }
@@ -88,9 +96,24 @@ export default function RewardsPage() {
       const userData = await userRes.json();
       const portfolio = userData.user?.portfolio;
 
+      let referralTotal = 0;
+      try {
+        const referralResult = await publicClient.readContract({
+          address: TMAP_DISHES_ADDRESS,
+          abi: rewardsAbi,
+          functionName: "getReferralRewards",
+          args: [address],
+        });
+        referralTotal = Number(referralResult) / 1e6;
+      } catch (err) {
+        console.error("Error fetching referral rewards:", err);
+      }
+
       if (!portfolio?.dishes || portfolio.dishes.length === 0) {
         setDishRewards([]);
-        setTotalRewards(0);
+        setDishRewardsTotal(0);
+        setReferralRewards(referralTotal);
+        setTotalRewards(referralTotal);
         setLoading(false);
         return;
       }
@@ -155,9 +178,15 @@ export default function RewardsPage() {
       const total = rewards.reduce((sum, r) => sum + r.pendingRewards, 0);
 
       setDishRewards(rewards);
-      setTotalRewards(total);
+      setDishRewardsTotal(total);
+      setReferralRewards(referralTotal);
+      setTotalRewards(total + referralTotal);
     } catch (err) {
       console.error("Error fetching rewards:", err);
+      setDishRewards([]);
+      setDishRewardsTotal(0);
+      setReferralRewards(0);
+      setTotalRewards(0);
     } finally {
       setLoading(false);
     }
@@ -244,6 +273,43 @@ export default function RewardsPage() {
     }
   };
 
+  const handleClaimReferral = async () => {
+    if (!isConnected || !address) {
+      setClaimError("Please connect your wallet");
+      return;
+    }
+
+    if (referralRewards <= 0) return;
+
+    setClaimError("");
+    setClaimSuccess(false);
+    resetClaim();
+    setClaimingDishId("referral");
+    setClaimStep("claiming");
+
+    try {
+      sendClaimCalls({
+        calls: [
+          {
+            to: TMAP_DISHES_ADDRESS,
+            data: encodeFunctionData({
+              abi: rewardsAbi,
+              functionName: "claimReferralRewards",
+              args: [],
+            }),
+          },
+        ],
+      });
+    } catch (err) {
+      console.error("Error claiming referral rewards:", err);
+      setClaimError(
+        err instanceof Error ? err.message : "Failed to claim referral rewards"
+      );
+      setClaimStep("idle");
+      setClaimingDishId(null);
+    }
+  };
+
   // Claim all rewards
   const handleClaimAll = async () => {
     if (!isConnected || !address) {
@@ -251,7 +317,7 @@ export default function RewardsPage() {
       return;
     }
 
-    if (dishRewards.length === 0) return;
+    if (dishRewards.length === 0 && referralRewards <= 0) return;
 
     setClaimError("");
     setClaimSuccess(false);
@@ -268,6 +334,23 @@ export default function RewardsPage() {
           args: [reward.dishId as Hash],
         }),
       }));
+
+      if (referralRewards > 0) {
+        calls.push({
+          to: TMAP_DISHES_ADDRESS,
+          data: encodeFunctionData({
+            abi: rewardsAbi,
+            functionName: "claimReferralRewards",
+            args: [],
+          }),
+        });
+      }
+
+      if (calls.length === 0) {
+        setClaimStep("idle");
+        setClaimingDishId(null);
+        return;
+      }
 
       sendClaimCalls({ calls });
     } catch (err) {
@@ -364,9 +447,30 @@ export default function RewardsPage() {
               <span className="text-emerald-600 mb-1">USDC</span>
             </div>
 
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="bg-white/80 border border-emerald-100 rounded-xl p-3">
+                <p className="text-xs text-emerald-600/80 mb-1">Stamp holdings</p>
+                <p className="text-base font-semibold text-emerald-800">
+                  ${dishRewardsTotal.toFixed(4)}
+                </p>
+                <p className="text-[11px] text-emerald-500">
+                  From {dishRewards.length} dish
+                  {dishRewards.length !== 1 ? "es" : ""}
+                </p>
+              </div>
+              <div className="bg-white/80 border border-emerald-100 rounded-xl p-3">
+                <p className="text-xs text-emerald-600/80 mb-1">Referral rewards</p>
+                <p className="text-base font-semibold text-emerald-800">
+                  ${referralRewards.toFixed(4)}
+                </p>
+                <p className="text-[11px] text-emerald-500">
+                  Earned from wishlist shares
+                </p>
+              </div>
+            </div>
+
             <p className="text-sm text-emerald-600/80 mb-4">
-              Earned from {dishRewards.length} dish
-              {dishRewards.length !== 1 ? "es" : ""} you hold
+              Claim everything in one tap or pick specific rewards below.
             </p>
 
             {totalRewards > 0 && (
@@ -438,6 +542,60 @@ export default function RewardsPage() {
         </div>
       )}
 
+      {/* Referral Rewards */}
+      <div className="px-4 mb-6">
+        <h2 className="text-lg font-semibold mb-3 text-gray-900">Referral Rewards</h2>
+        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-emerald-600 font-semibold">
+                Available to claim
+              </p>
+              <p className="text-2xl font-semibold text-emerald-700">
+                ${referralRewards.toFixed(4)}
+                <span className="text-sm text-gray-500 ml-1">USDC</span>
+              </p>
+              <p className="text-xs text-gray-500">
+                Earned when someone mints via your shared wishlist link
+              </p>
+            </div>
+            <button
+              onClick={handleClaimReferral}
+              disabled={isClaiming || referralRewards <= 0}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isClaiming && claimingDishId === "referral" ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Claiming...
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                  Claim referral
+                </>
+              )}
+            </button>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            Paid out from the on-chain referral pool. Pending amounts stay safe until you claim.
+          </div>
+        </div>
+      </div>
+
       {/* How It Works */}
       <div className="px-4 mb-6">
         <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
@@ -470,6 +628,10 @@ export default function RewardsPage() {
             </div>
             <div className="flex items-start gap-2">
               <span className="text-emerald-500 mt-0.5">3.</span>
+              <p>Referrals now accrue in a pool until you claim them</p>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-emerald-500 mt-0.5">4.</span>
               <p>Claim anytime - rewards accumulate until you collect them</p>
             </div>
           </div>
@@ -560,9 +722,9 @@ export default function RewardsPage() {
                 />
               </svg>
             </div>
-            <p className="text-gray-500 mb-2">No rewards available yet</p>
+            <p className="text-gray-500 mb-2">No holder rewards available yet</p>
             <p className="text-sm text-gray-400 mb-4">
-              Hold dish stamps to earn rewards when others mint
+              Hold dish stamps to earn rewards when others mint. Referral rewards are shown above.
             </p>
             <Link
               href="/explore"

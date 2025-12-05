@@ -79,6 +79,44 @@ export default function TrendingPage() {
     init();
   }, []);
 
+  // Hydrate holder counts from on-chain endpoint
+  const enrichHolderCounts = useCallback(async (dishes: TrendingDish[]) => {
+    if (!dishes || dishes.length === 0) return;
+
+    try {
+      const results = await Promise.all(
+        dishes.map(async (dish) => {
+          try {
+            const res = await fetch(`/api/dish/${encodeURIComponent(dish.dishId)}/holders`);
+            if (!res.ok) return null;
+            const data = await res.json();
+            return { dishId: dish.dishId, holderCount: Number(data.holderCount || 0) };
+          } catch (err) {
+            console.error("Error fetching holder count for dish", dish.dishId, err);
+            return null;
+          }
+        })
+      );
+
+      const holderMap = new Map<string, number>();
+      results.forEach((r) => {
+        if (r) holderMap.set(r.dishId, r.holderCount);
+      });
+
+      if (holderMap.size === 0) return;
+
+      setTrendingDishes((prev) =>
+        prev.map((dish) =>
+          holderMap.has(dish.dishId)
+            ? { ...dish, totalHolders: holderMap.get(dish.dishId) || dish.totalHolders }
+            : dish
+        )
+      );
+    } catch (err) {
+      console.error("Error enriching holder counts:", err);
+    }
+  }, []);
+
   // Fetch trending dishes
   const fetchTrendingDishes = useCallback(async () => {
     setDishesLoading(true);
@@ -94,14 +132,16 @@ export default function TrendingPage() {
       const res = await fetch(`/api/trending/dishes?${params}`);
       if (res.ok) {
         const data = await res.json();
-        setTrendingDishes(data.dishes || []);
+        const dishes = data.dishes || [];
+        setTrendingDishes(dishes);
+        enrichHolderCounts(dishes);
       }
     } catch (err) {
       console.error("Error fetching trending dishes:", err);
     } finally {
       setDishesLoading(false);
     }
-  }, [userLocation]);
+  }, [userLocation, enrichHolderCounts]);
 
   // Fetch top users
   const fetchTopUsers = useCallback(async (filter: UserFilter) => {
