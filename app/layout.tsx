@@ -20,6 +20,20 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://mbc-tau.vercel.app";
 export const metadata: Metadata = {
   title: "tmap - Social Map of Food Culture",
   description: "Discover, mint, and trade food culture Stamps",
+  icons: {
+    icon: [
+      { url: "/icon.png", sizes: "512x512", type: "image/png" },
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+    other: [
+      { rel: "icon", url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { rel: "icon", url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+  },
   openGraph: {
     title: "tmap - Social Map of Food Culture",
     description: "Discover, mint, and trade food culture Stamps",
