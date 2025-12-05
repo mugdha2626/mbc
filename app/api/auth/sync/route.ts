@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing fid" }, { status: 400 });
     }
 
-    const user = await upsertUser(
+    const { user, isNewUser } = await upsertUser(
       Number(fid),
       username || "",
       walletAddress || "",
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       displayName
     );
 
-    return NextResponse.json({ user });
+    return NextResponse.json({ user, isNewUser });
   } catch (error) {
     console.error("Error syncing user:", error);
     return NextResponse.json(

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, createContext, useContext } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
+import { OnboardingProvider } from "./OnboardingProvider";
 
 interface FarcasterUser {
   fid: number;
@@ -28,6 +29,7 @@ export function useFarcaster() {
 export function FarcasterProvider({ children }: { children: React.ReactNode }) {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
   const [user, setUser] = useState<FarcasterUser | null>(null);
+  const [isNewUser, setIsNewUser] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -62,7 +64,7 @@ export function FarcasterProvider({ children }: { children: React.ReactNode }) {
           setUser(userData);
 
           try {
-            await fetch("/api/auth/sync", {
+            const response = await fetch("/api/auth/sync", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -73,6 +75,14 @@ export function FarcasterProvider({ children }: { children: React.ReactNode }) {
                 displayName: userData.displayName,
               }),
             });
+
+            // Check if this is a new user from the API response
+            if (response.ok) {
+              const data = await response.json();
+              if (data.isNewUser) {
+                setIsNewUser(true);
+              }
+            }
           } catch (err) {
             console.error("Failed to save user to database:", err);
           }
@@ -101,7 +111,12 @@ export function FarcasterProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <FarcasterContext.Provider value={{ user, isLoaded: isSDKLoaded }}>
-      {children}
+      <OnboardingProvider
+        userName={user?.displayName || user?.username}
+        isNewUser={isNewUser}
+      >
+        {children}
+      </OnboardingProvider>
     </FarcasterContext.Provider>
   );
 }

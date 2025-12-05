@@ -12,6 +12,7 @@ import { useAccount, useSendCalls, useCallsStatus } from "wagmi";
 import { createPublicClient, http, encodeFunctionData, type Hash } from "viem";
 import { baseSepolia } from "viem/chains";
 import { TMAP_DISHES_ADDRESS, TMAP_DISHES_ABI } from "@/lib/contracts";
+import { useOnboarding } from "@/app/providers/OnboardingProvider";
 
 // Public client for reading contract data
 const publicClient = createPublicClient({
@@ -105,6 +106,30 @@ export default function ProfilePage() {
   >([]);
   const [showReputationTooltip, setShowReputationTooltip] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
+
+  // Dev mode: triple-tap on settings to trigger onboarding
+  const { resetOnboarding } = useOnboarding();
+  const [settingsTapCount, setSettingsTapCount] = useState(0);
+  const settingsTapTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const handleSettingsTap = () => {
+    setSettingsTapCount((prev) => prev + 1);
+
+    // Reset timer on each tap
+    if (settingsTapTimer.current) {
+      clearTimeout(settingsTapTimer.current);
+    }
+
+    settingsTapTimer.current = setTimeout(() => {
+      setSettingsTapCount(0);
+    }, 500);
+
+    // Trigger on 5 taps (hidden enough for users, easy for devs)
+    if (settingsTapCount >= 4) {
+      setSettingsTapCount(0);
+      resetOnboarding();
+    }
+  };
 
   // Sell modal state
   const [sellModalOpen, setSellModalOpen] = useState(false);
@@ -655,7 +680,11 @@ export default function ProfilePage() {
               </div>
             </div>
           </div>
-          <button className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors">
+          <button
+            onClick={handleSettingsTap}
+            className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+            title="Settings"
+          >
             <svg
               className="w-5 h-5 text-gray-600"
               fill="none"

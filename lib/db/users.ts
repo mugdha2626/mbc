@@ -37,7 +37,7 @@ export async function findUserByFid(fid: number): Promise<User | null> {
 
 /**
  * Create or update user on Farcaster sign-in
- * Returns the user (existing or newly created)
+ * Returns the user (existing or newly created) and whether it's a new user
  */
 export async function upsertUser(
   fid: number,
@@ -45,8 +45,12 @@ export async function upsertUser(
   walletAddress: string,
   pfpUrl?: string,
   displayName?: string
-): Promise<User> {
+): Promise<{ user: User; isNewUser: boolean }> {
   const db = await getDb();
+
+  // Check if user exists first
+  const existingUser = await db.collection<User>(COLLECTION).findOne({ fid });
+  const isNewUser = !existingUser;
 
   const setFields: Record<string, unknown> = {
     username,
@@ -75,7 +79,7 @@ export async function upsertUser(
     }
   );
 
-  return result as User;
+  return { user: result as User, isNewUser };
 }
 
 /**
