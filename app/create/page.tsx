@@ -21,7 +21,8 @@ import {
 } from "viem";
 import { baseSepolia } from "viem/chains";
 import { useAccount, useSendCalls, useCallsStatus } from "wagmi";
-import { TMAP_DISHES_ADDRESS, USDC_ADDRESS } from "@/lib/contracts";
+import { TMAP_DISHES_ADDRESS, USDC_ADDRESS, ERC20_ABI } from "@/lib/contracts";
+import { InlineFaucetButton } from "@/app/components/ui/InlineFaucetButton";
 
 // ABIs
 const erc20Abi = parseAbi([
@@ -186,6 +187,9 @@ export default function CreatePage() {
   // User's Farcaster FID
   const [userFid, setUserFid] = useState<Fid | undefined>(undefined);
 
+  // User's USDC balance
+  const [userBalance, setUserBalance] = useState<number>(0);
+
   // Calculate dishId and estimated cost when entering step 4
   useEffect(() => {
     const calculateCost = async () => {
@@ -241,6 +245,22 @@ export default function CreatePage() {
     calculateCost();
   }, [step, selectedRestaurant, dishName, mintTokenAmount]);
 
+  // Function to fetch USDC balance
+  const fetchUsdcBalance = async () => {
+    if (!address || !USDC_ADDRESS) return;
+    try {
+      const balance = await publicClient.readContract({
+        address: USDC_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [address],
+      });
+      setUserBalance(Number(balance) / 1e6);
+    } catch (err) {
+      console.error("Error fetching USDC balance:", err);
+    }
+  };
+
   useEffect(() => {
     getFid().then((fid) => setUserFid(fid));
     getCurrentPosition()
@@ -252,6 +272,13 @@ export default function CreatePage() {
       })
       .catch(() => {});
   }, []);
+
+  // Fetch USDC balance when wallet connects
+  useEffect(() => {
+    if (address) {
+      fetchUsdcBalance();
+    }
+  }, [address]);
 
   // Fetch existing dishes when entering step 3 (after selecting restaurant)
   useEffect(() => {
@@ -1760,6 +1787,21 @@ export default function CreatePage() {
                         : "Calculating..."}
                     </span>
                   </div>
+                  {/* USDC Balance with Faucet */}
+                  {isConnected && address && (
+                    <div className="flex justify-between items-center pt-2">
+                      <span className="text-sm text-gray-500">Your Balance</span>
+                      <span className="text-sm text-gray-700">
+                        <span className="font-medium">${userBalance.toFixed(2)}</span>
+                        <span className="ml-2">
+                          <InlineFaucetButton
+                            walletAddress={address}
+                            onSuccess={fetchUsdcBalance}
+                          />
+                        </span>
+                      </span>
+                    </div>
+                  )}
                   <p className="text-xs text-gray-500 mt-2 text-center">
                     Max $10 per dish per user
                   </p>

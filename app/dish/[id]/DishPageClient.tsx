@@ -26,6 +26,7 @@ import {
 import { useFarcaster } from "@/app/providers/FarcasterProvider";
 import { sdk } from "@farcaster/miniapp-sdk";
 import { navigateBack } from "@/lib/navigation";
+import { InlineFaucetButton } from "@/app/components/ui/InlineFaucetButton";
 
 // ABIs
 const erc20Abi = parseAbi([
@@ -239,25 +240,25 @@ export default function DishPageClient() {
     fetchOnChainData();
   }, [dishId]);
 
-  // Fetch user's USDC balance
-  useEffect(() => {
+  // Function to fetch USDC balance (used on mount and after faucet)
+  const fetchUsdcBalance = async () => {
     if (!address || !USDC_ADDRESS) return;
+    try {
+      const balance = await publicClient.readContract({
+        address: USDC_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [address],
+      });
+      setUserBalance(Number(balance) / 1e6);
+    } catch (err) {
+      console.error("Error fetching USDC balance:", err);
+    }
+  };
 
-    const fetchBalance = async () => {
-      try {
-        const balance = await publicClient.readContract({
-          address: USDC_ADDRESS,
-          abi: ERC20_ABI,
-          functionName: "balanceOf",
-          args: [address],
-        });
-        setUserBalance(Number(balance) / 1e6);
-      } catch (err) {
-        console.error("Error fetching USDC balance:", err);
-      }
-    };
-
-    fetchBalance();
+  // Fetch user's USDC balance on mount
+  useEffect(() => {
+    fetchUsdcBalance();
   }, [address]);
 
   // Check if dish is in user's wishlist
@@ -1156,12 +1157,18 @@ export default function DishPageClient() {
 
             {/* USDC Balance */}
             {isConnected && (
-              <p className="text-sm text-slate-500 mb-3">
-                Your USDC Balance:{" "}
-                <span className="font-medium text-slate-700">
-                  ${userBalance.toFixed(2)}
+              <div className="mb-4 flex justify-between items-center">
+                <span className="text-sm text-slate-500">
+                  Your USDC Balance:{" "}
+                  <span className="font-medium text-slate-700">${userBalance.toFixed(2)}</span>
                 </span>
-              </p>
+                {address && (
+                  <InlineFaucetButton
+                    walletAddress={address}
+                    onSuccess={fetchUsdcBalance}
+                  />
+                )}
+              </div>
             )}
 
             <div className="flex items-center gap-4 mb-4">
