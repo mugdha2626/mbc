@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
 import { BottomNav } from "@/app/components/layout/BottomNav";
 import { GoogleMapView } from "@/app/components/map/GoogleMapView";
@@ -8,6 +8,21 @@ import { getCurrentPosition } from "@/lib/geo";
 import getFid from "@/app/providers/Fid";
 import type { User } from "@/app/interface";
 import { calculateUserTier } from "@/lib/tiers";
+import { useAccount, useSendCalls, useCallsStatus } from "wagmi";
+import {
+  createPublicClient,
+  http,
+  encodeFunctionData,
+  type Hash,
+} from "viem";
+import { baseSepolia } from "viem/chains";
+import { TMAP_DISHES_ADDRESS, TMAP_DISHES_ABI } from "@/lib/contracts";
+
+// Public client for reading contract data
+const publicClient = createPublicClient({
+  chain: baseSepolia,
+  transport: http(),
+});
 
 interface MapRestaurant {
   id: string;
@@ -95,6 +110,35 @@ export default function ProfilePage() {
   >([]);
   const [showReputationTooltip, setShowReputationTooltip] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
+
+  // Sell modal state
+  const [sellModalOpen, setSellModalOpen] = useState(false);
+  const [selectedHolding, setSelectedHolding] = useState<HoldingWithDetails | null>(null);
+  const [sellAmount, setSellAmount] = useState(1);
+  const [sellValue, setSellValue] = useState<number | null>(null);
+  const [sellLoading, setSellLoading] = useState(false);
+  const [sellStep, setSellStep] = useState<"idle" | "selling" | "complete">("idle");
+  const [sellError, setSellError] = useState("");
+
+  // Wagmi hooks
+  const { address, isConnected } = useAccount();
+  const {
+    sendCalls: sendSellCalls,
+    data: sellCallsId,
+    error: sellCallError,
+    reset: resetSell,
+  } = useSendCalls();
+
+  const { data: sellStatus } = useCallsStatus({
+    id: sellCallsId?.id ?? "",
+    query: {
+      enabled: !!sellCallsId?.id,
+      refetchInterval: (data) => {
+        if (data.state.data?.status === "success") return false;
+        return 2000;
+      },
+    },
+  });
 
   useEffect(() => {
     const loadUser = async () => {
@@ -394,6 +438,150 @@ export default function ProfilePage() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [showReputationTooltip]);
+
+  // Fetch sell value when amount changes
+  const fetchSellValue = useCallback(async (dishId: string, amount: number) => {
+    if (!amount || amount <= 0) {
+      setSellValue(null);
+      return;
+    }
+
+    try {
+      const value = await publicClient.readContract({
+        address: TMAP_DISHES_ADDRESS,
+        abi: TMAP_DISHES_ABI,
+        functionName: "getSellValue",
+        args: [dishId as Hash, BigInt(amount)],
+      });
+      setSellValue(Number(value) / 1e6); // Convert from 6 decimals
+    } catch (err) {
+      console.error("Error fetching sell value:", err);
+      setSellValue(null);
+    }
+  }, []);
+
+  // Open sell modal
+  const openSellModal = (holding: HoldingWithDetails) => {
+    setSelectedHolding(holding);
+    setSellAmount(1);
+    setSellValue(null);
+    setSellError("");
+    setSellStep("idle");
+    setSellModalOpen(true);
+    // Fetch initial sell value
+    fetchSellValue(holding.dishId, 1);
+  };
+
+  // Close sell modal
+  const closeSellModal = () => {
+    setSellModalOpen(false);
+    setSelectedHolding(null);
+    setSellAmount(1);
+    setSellValue(null);
+    setSellError("");
+    setSellStep("idle");
+    resetSell();
+  };
+
+  // Update sell value when amount changes
+  useEffect(() => {
+    if (selectedHolding && sellAmount > 0) {
+      fetchSellValue(selectedHolding.dishId, sellAmount);
+    }
+  }, [sellAmount, selectedHolding, fetchSellValue]);
+
+  // Handle sell status changes
+  useEffect(() => {
+    const updateAfterSell = async () => {
+      if (!selectedHolding || !user?.fid) return;
+
+      try {
+        // Call API to update portfolio in database
+        await fetch("/api/dish/sell", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dishId: selectedHolding.dishId,
+            sellerFid: user.fid,
+            sellerAddress: address,
+            tokensSold: sellAmount,
+            usdcReceived: sellValue || 0,
+          }),
+        });
+      } catch (err) {
+        console.error("Error updating portfolio after sell:", err);
+      }
+
+      // Refresh page after update
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    };
+
+    if (sellStep === "selling" && sellStatus) {
+      if (
+        sellStatus.status === "success" ||
+        (sellStatus.receipts &&
+          sellStatus.receipts.every(
+            (r: { status?: string | number }) =>
+              r.status === "success" ||
+              r.status === "0x1" ||
+              r.status === 1 ||
+              r.status === "1"
+          ))
+      ) {
+        setSellStep("complete");
+        updateAfterSell();
+      } else if (sellStatus.status === "failure") {
+        setSellError("Transaction failed. Please try again.");
+        setSellStep("idle");
+      }
+    }
+  }, [sellStatus, sellStep, selectedHolding, user?.fid, address, sellAmount, sellValue]);
+
+  // Handle sell error
+  useEffect(() => {
+    if (sellCallError && sellStep === "selling") {
+      setSellError(sellCallError.message || "Sell failed");
+      setSellStep("idle");
+    }
+  }, [sellCallError, sellStep]);
+
+  // Execute sell
+  const handleSell = async () => {
+    if (!selectedHolding || !isConnected || !address) {
+      setSellError("Please connect your wallet");
+      return;
+    }
+
+    if (sellAmount <= 0 || sellAmount > selectedHolding.quantity) {
+      setSellError("Invalid amount");
+      return;
+    }
+
+    setSellError("");
+    setSellStep("selling");
+    resetSell();
+
+    try {
+      sendSellCalls({
+        calls: [
+          {
+            to: TMAP_DISHES_ADDRESS,
+            data: encodeFunctionData({
+              abi: TMAP_DISHES_ABI,
+              functionName: "sell",
+              args: [selectedHolding.dishId as Hash, BigInt(sellAmount)],
+            }),
+          },
+        ],
+      });
+    } catch (err) {
+      console.error("Error selling:", err);
+      setSellError(err instanceof Error ? err.message : "Failed to sell");
+      setSellStep("idle");
+    }
+  };
 
   if (isLoading) {
     return (
@@ -905,30 +1093,31 @@ export default function ProfilePage() {
         {holdings.length > 0 ? (
           <div className="space-y-3">
             {holdings.map((holding) => (
-              <Link
+              <div
                 key={holding.dishId}
-                href={`/dish/${holding.dishId}`}
-                className="block bg-white rounded-2xl p-4 border border-gray-100 hover:border-gray-200 transition-colors"
+                className="bg-white rounded-2xl p-4 border border-gray-100"
               >
                 <div className="flex gap-3">
-                  <img
-                    src={
-                      holding.image ||
-                      "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"
-                    }
-                    alt={holding.name}
-                    className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
-                  />
+                  <Link href={`/dish/${holding.dishId}`} className="flex-shrink-0">
+                    <img
+                      src={
+                        holding.image ||
+                        "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"
+                      }
+                      alt={holding.name}
+                      className="w-14 h-14 rounded-xl object-cover"
+                    />
+                  </Link>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between">
-                      <div className="min-w-0">
+                      <Link href={`/dish/${holding.dishId}`} className="min-w-0">
                         <p className="font-medium text-gray-900 truncate">
                           {holding.name}
                         </p>
                         <p className="text-sm text-gray-500">
                           {holding.quantity} Stamps
                         </p>
-                      </div>
+                      </Link>
                       <div className="text-right flex-shrink-0 ml-2">
                         <p className="font-semibold text-gray-900">
                           ${holding.totalValue.toFixed(2)}
@@ -971,9 +1160,19 @@ export default function ProfilePage() {
                         </span>
                       </div>
                     )}
+                    {/* Sell Button */}
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        openSellModal(holding);
+                      }}
+                      className="mt-2 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      Sell
+                    </button>
                   </div>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         ) : (
@@ -1119,6 +1318,214 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+
+      {/* Sell Modal */}
+      {sellModalOpen && selectedHolding && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center"
+          onClick={closeSellModal}
+        >
+          <div
+            className="bg-white w-full max-w-lg rounded-t-3xl max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header - Sticky */}
+            <div className="sticky top-0 bg-white px-4 pt-4 pb-3 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Sell Stamps</h2>
+              <button
+                onClick={closeSellModal}
+                className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"
+              >
+                <svg
+                  className="w-5 h-5 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* Dish Info */}
+              <div className="flex gap-3 p-3 bg-gray-50 rounded-xl">
+                <img
+                  src={
+                    selectedHolding.image ||
+                    "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"
+                  }
+                  alt={selectedHolding.name}
+                  className="w-14 h-14 rounded-xl object-cover"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-900 truncate">{selectedHolding.name}</p>
+                  <p className="text-sm text-gray-500">
+                    {selectedHolding.quantity} stamps · ${selectedHolding.currentPrice.toFixed(2)} each
+                  </p>
+                </div>
+              </div>
+
+              {/* Amount Selector */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Amount to sell
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setSellAmount(Math.max(1, sellAmount - 1))}
+                    disabled={sellAmount <= 1 || sellStep === "selling"}
+                    className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="text-lg text-gray-600">−</span>
+                  </button>
+                  <div className="flex-1 text-center">
+                    <p className="text-2xl font-bold text-gray-900">{sellAmount}</p>
+                  </div>
+                  <button
+                    onClick={() =>
+                      setSellAmount(Math.min(selectedHolding.quantity, sellAmount + 1))
+                    }
+                    disabled={sellAmount >= selectedHolding.quantity || sellStep === "selling"}
+                    className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="text-lg text-gray-600">+</span>
+                  </button>
+                </div>
+                {/* Quick select buttons */}
+                {selectedHolding.quantity > 1 && (
+                  <div className="flex gap-2 justify-center mt-2">
+                    <button
+                      onClick={() => setSellAmount(1)}
+                      className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                        sellAmount === 1
+                          ? "bg-primary-soft text-primary-dark"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      1
+                    </button>
+                    {selectedHolding.quantity >= 2 && (
+                      <button
+                        onClick={() => setSellAmount(Math.floor(selectedHolding.quantity / 2))}
+                        className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                          sellAmount === Math.floor(selectedHolding.quantity / 2)
+                            ? "bg-primary-soft text-primary-dark"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }`}
+                      >
+                        Half
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setSellAmount(selectedHolding.quantity)}
+                      className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                        sellAmount === selectedHolding.quantity
+                          ? "bg-primary-soft text-primary-dark"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      All
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Sell Value */}
+              <div className="bg-green-50 rounded-xl p-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-xs text-green-600 mb-0.5">You will receive</p>
+                    <p className="text-xl font-bold text-green-700">
+                      {sellValue !== null ? `$${sellValue.toFixed(2)}` : "..."}
+                      <span className="text-sm font-normal text-green-600 ml-1">USDC</span>
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                      70% return
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {sellError && (
+                <div className="bg-red-50 rounded-xl p-3">
+                  <p className="text-sm text-red-600">{sellError}</p>
+                </div>
+              )}
+
+              {/* Success Message */}
+              {sellStep === "complete" && (
+                <div className="bg-green-50 rounded-xl p-3">
+                  <div className="flex items-center gap-2">
+                    <svg
+                      className="w-4 h-4 text-green-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                    <p className="text-sm font-medium text-green-700">
+                      Sold successfully! Refreshing...
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Sell Button - Sticky bottom */}
+            <div className="sticky bottom-0 bg-white p-4 border-t border-gray-100">
+              <button
+                onClick={handleSell}
+                disabled={sellStep === "selling" || sellStep === "complete" || sellValue === null}
+                className="w-full py-3 btn-primary disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                {sellStep === "selling" ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Selling...
+                  </>
+                ) : sellStep === "complete" ? (
+                  <>
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                    Sold!
+                  </>
+                ) : (
+                  `Sell for $${sellValue?.toFixed(2) || "..."}`
+                )}
+              </button>
+              <p className="text-xs text-gray-400 text-center mt-2">
+                Selling returns 70% of market value
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <BottomNav />
     </div>
