@@ -308,10 +308,13 @@ export default function PortfolioPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--background)] text-gray-900 pb-24">
+      <div className="min-h-screen bg-gray-50 text-gray-900 pb-24">
         <Header title="Portfolio" />
         <div className="flex items-center justify-center h-64">
-          <div className="text-gray-500">Loading portfolio...</div>
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-6 h-6 rounded-full border-2 border-gray-200 border-t-gray-500 animate-spin" />
+            <p className="text-gray-400 text-sm">Loading...</p>
+          </div>
         </div>
         <BottomNav />
       </div>

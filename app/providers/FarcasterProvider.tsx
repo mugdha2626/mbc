@@ -90,9 +90,10 @@ export function FarcasterProvider({ children }: { children: React.ReactNode }) {
 
   if (!isSDKLoaded) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black">
-        <div className="text-center text-white">
-          <div className="text-xl font-semibold">Loading tmap...</div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-6 h-6 rounded-full border-2 border-gray-200 border-t-gray-500 animate-spin" />
+          <p className="text-gray-400 text-sm">Loading...</p>
         </div>
       </div>
     );

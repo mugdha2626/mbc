@@ -362,12 +362,12 @@ export default function RewardsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-pink text-foreground pb-24">
+      <div className="min-h-screen bg-gray-50 text-foreground pb-24">
         <Header title="Rewards" />
         <div className="flex items-center justify-center h-64">
           <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-3 border-[var(--primary-dark)] border-t-transparent rounded-full animate-spin" />
-            <span className="text-primary-text">Loading rewards...</span>
+            <div className="w-6 h-6 rounded-full border-2 border-gray-200 border-t-gray-500 animate-spin" />
+            <p className="text-gray-400 text-sm">Loading...</p>
           </div>
         </div>
         <BottomNav />
