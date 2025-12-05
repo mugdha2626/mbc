@@ -237,79 +237,6 @@ export default function RewardsPage() {
     }
   }, [claimCallError, claimStep]);
 
-  // Claim rewards for a specific dish
-  const handleClaim = async (dishId: string) => {
-    if (!isConnected || !address) {
-      setClaimError("Please connect your wallet");
-      return;
-    }
-
-    setClaimError("");
-    setClaimSuccess(false);
-    resetClaim();
-    setClaimingDishId(dishId);
-    setClaimStep("claiming");
-
-    try {
-      const dishIdBytes32 = dishId as Hash;
-
-      sendClaimCalls({
-        calls: [
-          {
-            to: TMAP_DISHES_ADDRESS,
-            data: encodeFunctionData({
-              abi: rewardsAbi,
-              functionName: "claimRewards",
-              args: [dishIdBytes32],
-            }),
-          },
-        ],
-      });
-    } catch (err) {
-      console.error("Error claiming rewards:", err);
-      setClaimError(err instanceof Error ? err.message : "Failed to claim");
-      setClaimStep("idle");
-      setClaimingDishId(null);
-    }
-  };
-
-  const handleClaimReferral = async () => {
-    if (!isConnected || !address) {
-      setClaimError("Please connect your wallet");
-      return;
-    }
-
-    if (referralRewards <= 0) return;
-
-    setClaimError("");
-    setClaimSuccess(false);
-    resetClaim();
-    setClaimingDishId("referral");
-    setClaimStep("claiming");
-
-    try {
-      sendClaimCalls({
-        calls: [
-          {
-            to: TMAP_DISHES_ADDRESS,
-            data: encodeFunctionData({
-              abi: rewardsAbi,
-              functionName: "claimReferralRewards",
-              args: [],
-            }),
-          },
-        ],
-      });
-    } catch (err) {
-      console.error("Error claiming referral rewards:", err);
-      setClaimError(
-        err instanceof Error ? err.message : "Failed to claim referral rewards"
-      );
-      setClaimStep("idle");
-      setClaimingDishId(null);
-    }
-  };
-
   // Claim all rewards
   const handleClaimAll = async () => {
     if (!isConnected || !address) {
@@ -453,18 +380,11 @@ export default function RewardsPage() {
                 <p className="text-base font-semibold text-emerald-800">
                   ${dishRewardsTotal.toFixed(4)}
                 </p>
-                <p className="text-[11px] text-emerald-500">
-                  From {dishRewards.length} dish
-                  {dishRewards.length !== 1 ? "es" : ""}
-                </p>
               </div>
               <div className="bg-white/80 border border-emerald-100 rounded-xl p-3">
                 <p className="text-xs text-emerald-600/80 mb-1">Referral rewards</p>
                 <p className="text-base font-semibold text-emerald-800">
                   ${referralRewards.toFixed(4)}
-                </p>
-                <p className="text-[11px] text-emerald-500">
-                  Earned from wishlist shares
                 </p>
               </div>
             </div>
@@ -499,7 +419,7 @@ export default function RewardsPage() {
                         d="M5 13l4 4L19 7"
                       />
                     </svg>
-                    Claim All Rewards
+                    Claim Rewards
                   </>
                 )}
               </button>
@@ -545,53 +465,35 @@ export default function RewardsPage() {
       {/* Referral Rewards */}
       <div className="px-4 mb-6">
         <h2 className="text-lg font-semibold mb-3 text-gray-900">Referral Rewards</h2>
-        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-emerald-600 font-semibold">
-                Available to claim
+        <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="w-11 h-11 rounded-full bg-emerald-50 flex items-center justify-center">
+              <svg
+                className="w-5 h-5 text-emerald-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 10l4.553-2.276A2 2 0 0122 9.528v4.944a2 2 0 01-2.447 1.804L15 14m-6 0l-4.553 2.276A2 2 0 012 14.472V9.528a2 2 0 012.447-1.804L9 10m0 0l3 2 3-2m-6 0l-3-2m9 2l3-2"
+                />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">
+                Referral pool balance
               </p>
-              <p className="text-2xl font-semibold text-emerald-700">
+              <p className="text-2xl font-semibold text-emerald-800">
                 ${referralRewards.toFixed(4)}
                 <span className="text-sm text-gray-500 ml-1">USDC</span>
               </p>
               <p className="text-xs text-gray-500">
-                Earned when someone mints via your shared wishlist link
+                Earned when someone mints from your shared wishlist link
               </p>
             </div>
-            <button
-              onClick={handleClaimReferral}
-              disabled={isClaiming || referralRewards <= 0}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {isClaiming && claimingDishId === "referral" ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Claiming...
-                </>
-              ) : (
-                <>
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                  Claim referral
-                </>
-              )}
-            </button>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            Paid out from the on-chain referral pool. Pending amounts stay safe until you claim.
           </div>
         </div>
       </div>
@@ -686,20 +588,9 @@ export default function RewardsPage() {
                       </p>
                       <p className="text-xs text-gray-400">USDC</p>
                     </div>
-                    <button
-                      onClick={() => handleClaim(reward.dishId)}
-                      disabled={isClaiming}
-                      className="px-3 py-1.5 bg-emerald-50 text-emerald-700 text-sm font-medium rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                    >
-                      {isClaiming && claimingDishId === reward.dishId ? (
-                        <>
-                          <div className="w-3 h-3 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin" />
-                          <span>Claiming</span>
-                        </>
-                      ) : (
-                        "Claim"
-                      )}
-                    </button>
+                    <p className="text-right text-xs text-gray-400">
+                      Included in claim all
+                    </p>
                   </div>
                 </div>
               </div>

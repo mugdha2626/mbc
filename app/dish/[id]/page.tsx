@@ -96,7 +96,7 @@ export default function DishPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const dishId = params.id as string;
-  const referrerFid = searchParams.get("ref"); // Referrer FID from wishlist
+  const urlReferrerFid = searchParams.get("ref"); // Referrer FID from URL (e.g., from wishlist link)
   const { user } = useFarcaster();
 
   const [dish, setDish] = useState<DishData | null>(null);
@@ -119,6 +119,11 @@ export default function DishPage() {
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [referrerWallet, setReferrerWallet] = useState<`0x${string}` | null>(null);
+  const [wishlistReferrerFid, setWishlistReferrerFid] = useState<string | null>(null);
+  const [persistentReferrerFid, setPersistentReferrerFid] = useState<string | null>(null);
+  
+  // Priority: URL referrer > wishlist referrer > persistent DB referrer
+  const referrerFid = urlReferrerFid || wishlistReferrerFid || persistentReferrerFid;
 
   // Wagmi hooks
   const { address, isConnected } = useAccount();
@@ -257,7 +262,7 @@ export default function DishPage() {
     fetchBalance();
   }, [address]);
 
-  // Check if dish is in user's wishlist
+  // Check if dish is in user's wishlist and get stored referrer
   useEffect(() => {
     const checkWishlist = async () => {
       if (!user?.fid || !dishId) return;
@@ -266,10 +271,17 @@ export default function DishPage() {
         const res = await fetch(`/api/wishlist?fid=${user.fid}`);
         if (res.ok) {
           const data = await res.json();
-          const isInWishlist = data.wishlist?.some(
-            (item: { dish: string }) => item.dish === dishId
+          const wishlistItem = data.wishlist?.find(
+            (item: { dish: string; referrer?: number }) => item.dish === dishId
           );
-          setIsWishlisted(isInWishlist);
+          setIsWishlisted(!!wishlistItem);
+          
+          // If dish is in wishlist with a referrer, store it
+          // This ensures referral works even if user navigates directly to dish page
+          if (wishlistItem?.referrer && wishlistItem.referrer !== 0) {
+            console.log(`[Dish] Found referrer in wishlist: FID ${wishlistItem.referrer}`);
+            setWishlistReferrerFid(String(wishlistItem.referrer));
+          }
         }
       } catch (err) {
         console.error("Error checking wishlist:", err);
@@ -278,6 +290,67 @@ export default function DishPage() {
 
     checkWishlist();
   }, [user?.fid, dishId]);
+
+  // Fetch persistent referral from database (fallback if not in URL or wishlist)
+  useEffect(() => {
+    const fetchPersistentReferral = async () => {
+      if (!user?.fid || !dishId) return;
+      // Don't fetch if we already have a referrer from URL or wishlist
+      if (urlReferrerFid || wishlistReferrerFid) return;
+
+      try {
+        const res = await fetch(`/api/referral?referredFid=${user.fid}&dishId=${dishId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.referrerFid) {
+            console.log(`[Dish] Found persistent referrer in DB: FID ${data.referrerFid}`);
+            setPersistentReferrerFid(String(data.referrerFid));
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching persistent referral:", err);
+      }
+    };
+
+    fetchPersistentReferral();
+  }, [user?.fid, dishId, urlReferrerFid, wishlistReferrerFid]);
+
+  // Record referral to database when viewing via referral link or wishlist
+  useEffect(() => {
+    const recordReferralToDB = async () => {
+      if (!user?.fid || !dishId) return;
+      
+      // Get the referrer to record (from URL or wishlist)
+      const referrerToRecord = urlReferrerFid || wishlistReferrerFid;
+      if (!referrerToRecord) return;
+      
+      // Don't record self-referrals
+      if (parseInt(referrerToRecord) === user.fid) return;
+
+      try {
+        const res = await fetch("/api/referral", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            referredFid: user.fid,
+            dishId,
+            referrerFid: parseInt(referrerToRecord),
+          }),
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          if (data.recorded) {
+            console.log(`[Dish] Recorded referral: FID ${referrerToRecord} referred you to this dish`);
+          }
+        }
+      } catch (err) {
+        console.error("Error recording referral:", err);
+      }
+    };
+
+    recordReferralToDB();
+  }, [user?.fid, dishId, urlReferrerFid, wishlistReferrerFid]);
 
   // Fetch referrer's wallet address if referrerFid is provided
   useEffect(() => {
