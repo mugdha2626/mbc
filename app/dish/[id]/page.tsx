@@ -41,7 +41,11 @@ const tmapDishesAbi = parseAbi([
   "error TransferFailed()",
 ]);
 
-type MintStep = "idle" | "approving" | "minting" | "complete";
+// Public client for reading
+const publicClient = createPublicClient({
+  chain: baseSepolia,
+  transport: http(),
+});
 
 // Convert string dishId to bytes32 for contract calls
 // If already a hex string (hashed), use it directly; otherwise convert
@@ -73,6 +77,7 @@ interface DishData {
   currentPrice?: number;
   marketCap?: number;
   dailyVolume?: number;
+  dailyPriceChange?: number;
   totalHolders?: number;
   currentSupply?: number;
   weeklyChange?: number;
@@ -86,18 +91,17 @@ export default function DishPage() {
   const router = useRouter();
   const params = useParams();
   const dishId = params.id as string;
-  const { user } = useFarcaster();
-  const { referrerFid } = useReferral();
 
   const [dish, setDish] = useState<DishData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [backAmount, setBackAmount] = useState(1);
-  const [isWishlisted, setIsWishlisted] = useState(false);
   const [mintStep, setMintStep] = useState<MintStep>("idle");
   const [mintError, setMintError] = useState("");
   const [triggerMint, setTriggerMint] = useState(false);
   const [usdcAmountToMint, setUsdcAmountToMint] = useState<bigint>(BigInt(0));
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
+  const [onChainPrice, setOnChainPrice] = useState<number | null>(null);
+  const [userBalance, setUserBalance] = useState(0);
 
   const addDebug = (msg: string) => {
     setDebugInfo((prev) => [...prev, msg]);
@@ -144,35 +148,39 @@ export default function DishPage() {
     },
   });
 
-  // Fetch dish data
+  // Fetch dish data from API
   useEffect(() => {
-    const fetchDish = async () => {
-      if (!dishId) return;
+    if (!dishId) return;
 
+    const fetchDish = async () => {
       try {
+        setLoading(true);
         const res = await fetch(`/api/dish/${dishId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setDish(data.dish);
-        } else {
-          setMintError("Dish not found");
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to fetch dish");
         }
-      } catch (error) {
-        console.error("Failed to fetch dish:", error);
-        setMintError("Failed to load dish");
+
+        setDish(data.dish);
+      } catch (err) {
+        console.error("Error fetching dish:", err);
+        setMintError(
+          err instanceof Error ? err.message : "Failed to load dish"
+        );
       } finally {
-        setIsLoading(false);
+        setLoading(false);
       }
     };
 
     fetchDish();
   }, [dishId]);
 
-  // Check wishlist status
+  // Fetch on-chain price
   useEffect(() => {
-    const checkWishlist = async () => {
-      if (!user || !dishId) return;
+    if (!dishId || !TMAP_DISHES_ADDRESS) return;
 
+    const fetchOnChainData = async () => {
       try {
         // Convert string dishId to bytes32 for contract call
         const dishIdBytes32 = stringToBytes32(dishId);
@@ -620,6 +628,8 @@ export default function DishPage() {
     }
   };
 
+  const isMinting = mintStep !== "idle" && mintStep !== "complete";
+
   const getButtonText = () => {
     switch (mintStep) {
       case "checking":
@@ -635,12 +645,7 @@ export default function DishPage() {
     }
   };
 
-  const userBalance = usdcBalance ? Number(usdcBalance) / 1_000_000 : 0;
-  const price = currentPrice
-    ? Number(currentPrice) / 1_000_000
-    : dish?.currentPrice || 0;
-
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -780,7 +785,7 @@ export default function DishPage() {
                 <p className="text-2xl font-bold text-gray-900">
                   $
                   {(
-                    dish.marketCap || currentPrice * dish.currentSupply
+                    dish.marketCap || currentPrice * (dish.currentSupply || 0)
                   ).toFixed(2)}
                 </p>
               </div>
@@ -799,7 +804,7 @@ export default function DishPage() {
             </div>
             <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                {dish.dailyPriceChange >= 0 ? (
+                {(dish.dailyPriceChange ?? 0) >= 0 ? (
                   <>
                     <svg
                       className="w-4 h-4 text-green-500"
@@ -834,7 +839,7 @@ export default function DishPage() {
                       />
                     </svg>
                     <span className="font-medium text-red-600">
-                      Down {Math.abs(dish.dailyPriceChange)}% today
+                      Down {Math.abs(dish.dailyPriceChange ?? 0)}% today
                     </span>
                   </>
                 )}
