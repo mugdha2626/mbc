@@ -454,11 +454,10 @@ export default function DishPageClient() {
 
     setIsSharing(true);
     try {
-      // Get the app URL - in production this would be your deployed URL
+      // Get the app URL from environment or fallback to window origin
       const appUrl =
-        typeof window !== "undefined"
-          ? window.location.origin
-          : "https://inez-cronish-hastately.ngrok-free.dev";
+        process.env.NEXT_PUBLIC_APP_URL ||
+        (typeof window !== "undefined" ? window.location.origin : "https://mbc-tau.vercel.app");
 
       // Build the dish URL with referral parameter
       const referrerParam = user?.fid ? `?ref=${user.fid}` : "";
@@ -491,10 +490,11 @@ export default function DishPageClient() {
       console.error("Error sharing to Farcaster:", err);
       // Fallback: copy link to clipboard
       try {
-        const appUrl =
-          typeof window !== "undefined" ? window.location.origin : "";
+        const fallbackAppUrl =
+          process.env.NEXT_PUBLIC_APP_URL ||
+          (typeof window !== "undefined" ? window.location.origin : "https://mbc-tau.vercel.app");
         const referrerParam = user?.fid ? `?ref=${user.fid}` : "";
-        const shareUrl = `${appUrl}/dish/${encodeURIComponent(
+        const shareUrl = `${fallbackAppUrl}/dish/${encodeURIComponent(
           dishId
         )}${referrerParam}`;
         await navigator.clipboard.writeText(shareUrl);

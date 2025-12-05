@@ -4,6 +4,7 @@ import { createPublicClient, http, type Hash } from "viem";
 import { baseSepolia } from "viem/chains";
 import { TMAP_DISHES_ADDRESS, TMAP_DISHES_ABI } from "@/lib/contracts";
 import { removeFromWishlist } from "@/lib/db/users";
+import { recordReferral } from "@/lib/db/referrals";
 
 // Create a public client to read from the contract
 const publicClient = createPublicClient({
@@ -160,20 +161,48 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If there's a referrer, update their referral tracking
-    if (referrerFid && isNewHolder) {
-      await db
-        .collection("users")
-        .updateOne({ fid: referrerFid, "portfolio.dishes.dish": dishId }, {
-          $push: {
-            "portfolio.dishes.$.referredTo": minterFid,
-          },
-          $inc: {
-            reputationScore: 10, // Reward for successful referral
-          },
-          $set: { updatedAt: now },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any);
+    // If there's a referrer, record the referral and update tracking
+    if (referrerFid && referrerFid !== minterFid && isNewHolder) {
+      // Record in referrals collection (first referrer wins)
+      try {
+        await recordReferral(minterFid, dishId, referrerFid);
+      } catch (err) {
+        console.error("Error recording referral:", err);
+      }
+
+      // Update referrer's stats - they get credit even if they don't own the dish
+      // First try to update their dish entry if they have one
+      const referrerHasDish = await db.collection("users").findOne({
+        fid: referrerFid,
+        "portfolio.dishes.dish": dishId,
+      });
+
+      if (referrerHasDish) {
+        // Referrer owns this dish - add to their referredTo array
+        await db
+          .collection("users")
+          .updateOne({ fid: referrerFid, "portfolio.dishes.dish": dishId }, {
+            $push: {
+              "portfolio.dishes.$.referredTo": minterFid,
+            },
+            $inc: {
+              reputationScore: 10, // Reward for successful referral
+            },
+            $set: { updatedAt: now },
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } as any);
+      } else {
+        // Referrer doesn't own this dish - just update their reputation
+        await db.collection("users").updateOne(
+          { fid: referrerFid },
+          {
+            $inc: { reputationScore: 10 },
+            $set: { updatedAt: now },
+          }
+        );
+      }
+
+      console.log(`[Referral] FID ${referrerFid} credited for referring FID ${minterFid} to dish ${dishId.slice(0, 10)}...`);
     }
 
     // Update minter's reputation score
