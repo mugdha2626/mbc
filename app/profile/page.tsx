@@ -134,8 +134,10 @@ export default function ProfilePage() {
         if (userRes2.ok) {
           const userData = await userRes2.json();
           const portfolio = userData.user?.portfolio;
+          console.log("Portfolio data:", portfolio);
 
           if (portfolio?.dishes) {
+            console.log("Portfolio dishes:", portfolio.dishes);
             const holdingsPromises = portfolio.dishes.map(async (item: { dish: string; quantity: number; return: number; referredBy?: number | null; referredTo?: number[] }) => {
               try {
                 const dishRes = await fetch(`/api/dish/${item.dish}`);
@@ -177,6 +179,7 @@ export default function ProfilePage() {
             });
 
             const holdingsResults = (await Promise.all(holdingsPromises)).filter(Boolean) as HoldingWithDetails[];
+            console.log("Holdings with details:", holdingsResults);
             setHoldings(holdingsResults);
 
             // Fetch created dishes with referredTo info
@@ -232,6 +235,7 @@ export default function ProfilePage() {
               });
 
               const createdDishesResults = await Promise.all(createdDishesPromises);
+              console.log("Created dishes with referrals:", createdDishesResults);
               setCreatedDishes(createdDishesResults);
             }
           }
@@ -662,12 +666,14 @@ export default function ProfilePage() {
                       {holding.restaurantName && <span>{holding.restaurantName}</span>}
                     </div>
                     {holding.referredBy && (
-                      <p className="text-xs text-purple-600 mt-1 flex items-center gap-1">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                        Referred by @{holding.referredBy.username}
-                      </p>
+                      <div className="mt-2">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-purple-50 text-purple-700 text-xs font-medium rounded-full">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          via @{holding.referredBy.username}
+                        </span>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -693,9 +699,9 @@ export default function ProfilePage() {
       </div>
 
       {/* Stamps You Created Section */}
-      {createdDishes.length > 0 && (
-        <div className="px-4 mt-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Stamps You Created</h2>
+      <div className="px-4 mt-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Stamps You Created</h2>
+        {createdDishes.length > 0 ? (
           <div className="space-y-3">
             {createdDishes.map((dish) => (
               <Link
@@ -733,16 +739,18 @@ export default function ProfilePage() {
                       <span>{dish.totalHolders} holders</span>
                     </div>
                     {dish.referredTo.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-gray-100">
-                        <p className="text-xs text-green-600 flex items-center gap-1">
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 text-xs font-medium rounded-full">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
-                          Earned 2.5% from {dish.referredTo.length} referral{dish.referredTo.length > 1 ? 's' : ''}:
-                          <span className="font-medium ml-1">
-                            {dish.referredTo.map(u => `@${u.username}`).join(', ')}
+                          +2.5% earned
+                        </span>
+                        {dish.referredTo.map(u => (
+                          <span key={u.fid} className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                            @{u.username}
                           </span>
-                        </p>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -750,8 +758,23 @@ export default function ProfilePage() {
               </Link>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="bg-white rounded-2xl p-8 border border-gray-100 text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            </div>
+            <p className="text-gray-500 mb-4">You haven&apos;t created any stamps yet</p>
+            <Link
+              href="/create"
+              className="inline-block btn-primary px-6 py-2 rounded-xl text-sm font-medium"
+            >
+              Create a Stamp
+            </Link>
+          </div>
+        )}
+      </div>
 
       <BottomNav />
     </div>
