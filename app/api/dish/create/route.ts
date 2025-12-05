@@ -196,22 +196,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update creator's portfolio
-    await db.collection("users").updateOne(
-      { fid: body.creatorFid },
-      {
-        $addToSet: {
-          "portfolio.dishes": {
-            dish: dish.dishId,
-            quantity: 0,
-            return: 0,
-            referredBy: null,
-            referredTo: [],
-          },
-        },
-        $set: { updatedAt: now },
-      }
-    );
+    // Note: User's portfolio is updated in /api/dish/mint after successful minting
+    // This ensures totalHolders is correctly incremented
 
     // Update the restaurant's rating based on all its dishes
     await updateRestaurantRating(body.restaurantId);

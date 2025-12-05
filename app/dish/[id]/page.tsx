@@ -3,6 +3,8 @@
 import { useRouter, useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { useAccount, useSendCalls, useCallsStatus } from "wagmi";
+import getFid from "@/app/providers/Fid";
+import { Fid } from "@/app/interface";
 import {
   zeroAddress,
   encodeFunctionData,
@@ -33,6 +35,7 @@ const tmapDishesAbi = parseAbi([
   "function mint(bytes32 dishId, uint256 usdcAmount, address referrer)",
   "function getRemainingAllowance(address user, bytes32 dishId) view returns (uint256)",
   "function getMintCost(bytes32 dishId, uint256 tokenAmount) view returns (uint256)",
+  "function getTokensForUsdc(bytes32 dishId, uint256 usdcAmount) view returns (uint256 tokenAmount, uint256 actualCost)",
   "error DishAlreadyExists()",
   "error DishDoesNotExist()",
   "error ZeroAmount()",
@@ -102,6 +105,11 @@ export default function DishPage() {
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
   const [onChainPrice, setOnChainPrice] = useState<number | null>(null);
   const [userBalance, setUserBalance] = useState(0);
+  const [userFid, setUserFid] = useState<Fid | undefined>(undefined);
+  const [lastMintAmount, setLastMintAmount] = useState<bigint | null>(null);
+  const [lastTokensReceived, setLastTokensReceived] = useState<number | null>(
+    null
+  );
 
   const addDebug = (msg: string) => {
     setDebugInfo((prev) => [...prev, msg]);
@@ -147,6 +155,11 @@ export default function DishPage() {
       },
     },
   });
+
+  // Get user's FID
+  useEffect(() => {
+    getFid().then((fid) => setUserFid(fid));
+  }, []);
 
   // Fetch dish data from API
   useEffect(() => {
@@ -447,7 +460,45 @@ export default function DishPage() {
       addDebug(`Mint status: ${mintStatus.status || "undefined"}`);
 
       if (isStatusSuccess(mintStatus)) {
-        addDebug("Mint complete!");
+        addDebug("Mint complete! Updating dish stats...");
+
+        // Update dish stats in database
+        if (
+          lastMintAmount &&
+          lastTokensReceived !== null &&
+          userFid &&
+          address
+        ) {
+          (async () => {
+            try {
+              const mintRes = await fetch("/api/dish/mint", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  dishId,
+                  minterFid: userFid,
+                  minterAddress: address,
+                  usdcAmount: Number(lastMintAmount) / 1e6,
+                  tokensReceived: lastTokensReceived,
+                }),
+              });
+
+              const mintData = await mintRes.json();
+              if (!mintRes.ok) {
+                console.error("Failed to update dish stats:", mintData.error);
+                addDebug(
+                  `Warning: Could not update dish stats: ${mintData.error}`
+                );
+              } else {
+                addDebug("Dish stats updated successfully!");
+              }
+            } catch (err) {
+              console.error("Error updating dish stats:", err);
+              addDebug(`Warning: Could not update dish stats: ${err}`);
+            }
+          })();
+        }
+
         setMintStep("complete");
         // Refresh data
         setTimeout(() => {
@@ -495,6 +546,7 @@ export default function DishPage() {
         addDebug("Mint still pending...");
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mintStatus, mintStep]);
 
   // Watch for mint error (call failed to send)
@@ -556,10 +608,20 @@ export default function DishPage() {
           functionName: "getMintCost",
           args: [dishIdBytes32, BigInt(backAmount)],
         });
+
+        // Get tokens that will be received
+        const [tokensReceived] = await publicClient.readContract({
+          address: TMAP_DISHES_ADDRESS,
+          abi: tmapDishesAbi,
+          functionName: "getTokensForUsdc",
+          args: [dishIdBytes32, calculatedMintAmount],
+        });
+        setLastTokensReceived(Number(tokensReceived));
+
         addDebug(
           `Mint cost: $${
             Number(calculatedMintAmount) / 1e6
-          } USDC (for ${backAmount} token(s))`
+          } USDC (for ${backAmount} token(s), will receive ${tokensReceived.toString()} tokens)`
         );
       } catch (err) {
         console.error("Error calculating mint cost:", err);
@@ -582,6 +644,7 @@ export default function DishPage() {
 
       // Set the calculated amount for minting
       setUsdcAmountToMint(calculatedMintAmount);
+      setLastMintAmount(calculatedMintAmount);
 
       // Check allowance
       const currentAllowance = await publicClient.readContract({

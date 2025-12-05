@@ -21,11 +21,7 @@ import {
 } from "viem";
 import { baseSepolia } from "viem/chains";
 import { useAccount, useSendCalls, useCallsStatus } from "wagmi";
-import {
-  TMAP_DISHES_ADDRESS,
-  USDC_ADDRESS,
-  INITIAL_MINT_AMOUNT,
-} from "@/lib/contracts";
+import { TMAP_DISHES_ADDRESS, USDC_ADDRESS } from "@/lib/contracts";
 
 // ABIs
 const erc20Abi = parseAbi([
@@ -150,6 +146,8 @@ export default function CreatePage() {
   // Step 3: Dish details
   const [dishName, setDishName] = useState("");
   const [dishDescription, setDishDescription] = useState("");
+  const [mintTokenAmount, setMintTokenAmount] = useState(1);
+  const [dishExists, setDishExists] = useState(false);
 
   // Step 4: Creating
   const [createStep, setCreateStep] = useState<CreateStep>("idle");
@@ -162,6 +160,11 @@ export default function CreatePage() {
 
   // Flag to trigger direct mint (when skipping approve and createDish)
   const [triggerDirectMint, setTriggerDirectMint] = useState(false);
+  const [estimatedCost, setEstimatedCost] = useState<number | null>(null);
+  const [lastMintAmount, setLastMintAmount] = useState<bigint | null>(null);
+  const [lastTokensReceived, setLastTokensReceived] = useState<number | null>(
+    null
+  );
 
   // Get user's current location for biased search
   const [userLocation, setUserLocation] = useState<{
@@ -171,6 +174,61 @@ export default function CreatePage() {
 
   // User's Farcaster FID
   const [userFid, setUserFid] = useState<Fid | undefined>(undefined);
+
+  // Calculate dishId and estimated cost when entering step 4
+  useEffect(() => {
+    const calculateCost = async () => {
+      if (
+        step !== 4 ||
+        !selectedRestaurant ||
+        !dishName.trim() ||
+        !TMAP_DISHES_ADDRESS ||
+        mintTokenAmount < 1
+      ) {
+        setEstimatedCost(null);
+        return;
+      }
+
+      try {
+        // Calculate dishId first
+        const { dishId: calculatedDishId } = await checkDishExists(
+          selectedRestaurant.id,
+          dishName
+        );
+
+        if (!calculatedDishId) {
+          setEstimatedCost(null);
+          return;
+        }
+
+        // Try to get cost (might fail if dish doesn't exist on-chain yet)
+        try {
+          const dishIdBytes32 = stringToBytes32(calculatedDishId);
+          const cost = await publicClient.readContract({
+            address: TMAP_DISHES_ADDRESS,
+            abi: tmapDishesAbi,
+            functionName: "getMintCost",
+            args: [dishIdBytes32, BigInt(mintTokenAmount)],
+          });
+          setEstimatedCost(Number(cost) / 1e6);
+        } catch {
+          // Dish might not exist on-chain yet, use a rough estimate
+          // Base price is $0.10, and increases by $0.0125 per token
+          // For N tokens starting from supply 0: cost ≈ N * (0.10 + 0.0125 * (N-1) / 2)
+          const basePrice = 0.1;
+          const slope = 0.0125;
+          const estimated =
+            mintTokenAmount * (basePrice + (slope * (mintTokenAmount - 1)) / 2);
+          setEstimatedCost(estimated);
+        }
+      } catch {
+        // If dishId calculation fails, can't estimate
+        setEstimatedCost(null);
+      }
+    };
+
+    calculateCost();
+  }, [step, selectedRestaurant, dishName, mintTokenAmount]);
 
   useEffect(() => {
     getFid().then((fid) => setUserFid(fid));
@@ -553,17 +611,21 @@ export default function CreatePage() {
         return;
       }
 
-      // Calculate the mint amount dynamically using getMintCost for 1 token
+      // Calculate the mint amount dynamically using getMintCost for selected token amount
       let mintAmount: bigint;
       try {
-        addDebug("Calculating mint amount for 1 token...");
+        addDebug(`Calculating mint amount for ${mintTokenAmount} token(s)...`);
         mintAmount = await publicClient.readContract({
           address: TMAP_DISHES_ADDRESS,
           abi: tmapDishesAbi,
           functionName: "getMintCost",
-          args: [dishIdBytes32, BigInt(1)],
+          args: [dishIdBytes32, BigInt(mintTokenAmount)],
         });
-        addDebug(`Mint amount: ${Number(mintAmount) / 1e6} USDC (for 1 token)`);
+        addDebug(
+          `Mint amount: ${
+            Number(mintAmount) / 1e6
+          } USDC (for ${mintTokenAmount} token(s))`
+        );
       } catch (err) {
         console.error("Error calculating mint amount:", err);
         addDebug(`Error calculating mint amount: ${err}`);
@@ -620,6 +682,7 @@ export default function CreatePage() {
       }
 
       // Check how many tokens will be minted with this amount
+      let tokensReceived: bigint = BigInt(0);
       try {
         addDebug("Checking how many tokens will be minted...");
         const [tokenAmount, actualCost] = await publicClient.readContract({
@@ -628,6 +691,8 @@ export default function CreatePage() {
           functionName: "getTokensForUsdc",
           args: [dishIdBytes32, mintAmount],
         });
+        tokensReceived = tokenAmount;
+        setLastTokensReceived(Number(tokensReceived));
         addDebug(
           `Will mint ${tokenAmount.toString()} tokens for $${
             Number(actualCost) / 1e6
@@ -773,6 +838,9 @@ export default function CreatePage() {
         return;
       }
 
+      // Store mint amount for later use
+      setLastMintAmount(mintAmount);
+
       // If simulation passed, send the actual transaction
       addDebug("Simulation passed, sending mint transaction...");
       sendMintCalls({
@@ -843,11 +911,12 @@ export default function CreatePage() {
     }
   };
 
-  // Save to database
+  // Save to database and update dish stats after minting
   const saveToDatabase = async () => {
-    if (!selectedRestaurant || !userFid || !dishId) return;
+    if (!selectedRestaurant || !userFid || !dishId || !address) return;
 
     try {
+      // First, save/create the dish in database
       const res = await fetch("/api/dish/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -870,6 +939,40 @@ export default function CreatePage() {
       }
 
       addDebug("Saved to database!");
+
+      // Now update dish stats after minting
+      if (lastMintAmount && lastTokensReceived !== null) {
+        try {
+          addDebug("Updating dish stats after mint...");
+
+          // Call mint API to update dish stats
+          const mintRes = await fetch("/api/dish/mint", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              dishId,
+              minterFid: userFid,
+              minterAddress: address,
+              usdcAmount: Number(lastMintAmount) / 1e6, // Convert to USDC
+              tokensReceived: lastTokensReceived,
+            }),
+          });
+
+          const mintData = await mintRes.json();
+          if (!mintRes.ok) {
+            console.error("Failed to update dish stats:", mintData.error);
+            addDebug(`Warning: Could not update dish stats: ${mintData.error}`);
+            // Don't throw - dish was saved, just stats update failed
+          } else {
+            addDebug("Dish stats updated successfully!");
+          }
+        } catch (err) {
+          console.error("Error updating dish stats:", err);
+          addDebug(`Warning: Could not update dish stats: ${err}`);
+          // Don't throw - dish was saved, just stats update failed
+        }
+      }
+
       setCreateStep("complete");
       router.push(`/dish/${dishId}`);
     } catch (err) {
@@ -917,17 +1020,38 @@ export default function CreatePage() {
         selectedRestaurant.id,
         dishName
       );
-      const targetDishId = fetchedDishId; // This is now a string like "restaurantId:dishName"
+      const targetDishId = fetchedDishId; // This is now a hash string
       setDishId(targetDishId);
+      setDishExists(exists);
       addDebug(`DishId: ${targetDishId}`);
       addDebug(`DB exists: ${exists}`);
+
+      // Calculate mint cost first to check balance
+      const dishIdBytes32ForCheck = stringToBytes32(targetDishId);
+      let estimatedMintCost = BigInt(0);
+      try {
+        estimatedMintCost = await publicClient.readContract({
+          address: TMAP_DISHES_ADDRESS,
+          abi: tmapDishesAbi,
+          functionName: "getMintCost",
+          args: [dishIdBytes32ForCheck, BigInt(mintTokenAmount)],
+        });
+        addDebug(
+          `Estimated mint cost: ${Number(estimatedMintCost) / 1e6} USDC`
+        );
+      } catch (err) {
+        console.error("Error calculating estimated mint cost:", err);
+        // Continue anyway, will check later
+      }
 
       // Check balance
       const balance = await checkBalance(address);
       addDebug(`Balance: ${Number(balance) / 1e6} USDC`);
-      if (balance < INITIAL_MINT_AMOUNT) {
+      if (estimatedMintCost > 0 && balance < estimatedMintCost) {
         throw new Error(
-          `Insufficient USDC. Need ${Number(INITIAL_MINT_AMOUNT) / 1e6} USDC.`
+          `Insufficient USDC. You have $${(Number(balance) / 1e6).toFixed(
+            2
+          )}, need $${(Number(estimatedMintCost) / 1e6).toFixed(2)}.`
         );
       }
 
@@ -984,7 +1108,7 @@ export default function CreatePage() {
             data: encodeFunctionData({
               abi: erc20Abi,
               functionName: "approve",
-              args: [TMAP_DISHES_ADDRESS, INITIAL_MINT_AMOUNT * BigInt(1000)],
+              args: [TMAP_DISHES_ADDRESS, estimatedMintCost * BigInt(1000)],
             }),
           },
         ],
@@ -1191,7 +1315,8 @@ export default function CreatePage() {
                 Find the Place
               </h2>
               <p className="text-sm text-gray-500 mb-4">
-                Search for the restaurant, cafe, or bar where you want to create a dish Stamp.
+                Search for the restaurant, cafe, or bar where you want to create
+                a dish Stamp.
               </p>
               <div className="relative">
                 <input
@@ -1222,9 +1347,12 @@ export default function CreatePage() {
                   )}
                 </div>
               </div>
-              {searchQuery.trim().length > 0 && searchQuery.trim().length < 2 && (
-                <p className="text-xs text-gray-400 mt-2">Type at least 2 characters to search</p>
-              )}
+              {searchQuery.trim().length > 0 &&
+                searchQuery.trim().length < 2 && (
+                  <p className="text-xs text-gray-400 mt-2">
+                    Type at least 2 characters to search
+                  </p>
+                )}
             </div>
             {searchResults.length > 0 && (
               <div className="space-y-2">
@@ -1387,9 +1515,20 @@ export default function CreatePage() {
         {/* Step 4: Confirm & Create */}
         {step === 4 && selectedRestaurant && (
           <div className="space-y-6">
+            {dishExists && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                <p className="font-medium text-yellow-800 mb-1">
+                  Dish Already Exists
+                </p>
+                <p className="text-sm text-yellow-700">
+                  This dish has already been created. You will only be minting{" "}
+                  {mintTokenAmount} token(s), not creating a new dish.
+                </p>
+              </div>
+            )}
             <div className="bg-white border border-gray-200 rounded-2xl p-6">
               <h3 className="font-semibold text-gray-900 mb-4">
-                Review Your Stamp
+                {dishExists ? "Review Your Mint" : "Review Your Stamp"}
               </h3>
               <div className="space-y-4">
                 <div className="flex justify-between">
@@ -1408,9 +1547,49 @@ export default function CreatePage() {
                     Base Sepolia
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Mint Amount</span>
-                  <span className="font-medium text-gray-900">$0.10 USDC</span>
+                <div className="pt-4 border-t border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Number of Stamps to Mint
+                  </label>
+                  <div className="flex items-center gap-4 mb-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setMintTokenAmount(Math.max(1, mintTokenAmount - 1))
+                      }
+                      disabled={isCreating}
+                      className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span className="text-xl text-gray-600">-</span>
+                    </button>
+                    <div className="flex-1 text-center">
+                      <p className="text-3xl font-bold text-gray-900">
+                        {mintTokenAmount}
+                      </p>
+                      <p className="text-sm text-gray-500">Stamps</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setMintTokenAmount(mintTokenAmount + 1)}
+                      disabled={isCreating}
+                      className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span className="text-xl text-gray-600">+</span>
+                    </button>
+                  </div>
+                  <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+                    <span className="text-sm text-gray-500">
+                      Estimated Cost
+                    </span>
+                    <span className="text-lg font-semibold text-gray-900">
+                      {estimatedCost !== null
+                        ? `$${estimatedCost.toFixed(2)} USDC`
+                        : "Calculating..."}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2 text-center">
+                    Max $10 per dish per user
+                  </p>
                 </div>
               </div>
             </div>
@@ -1463,6 +1642,8 @@ export default function CreatePage() {
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   {getButtonText()}
                 </>
+              ) : dishExists ? (
+                `Mint ${mintTokenAmount} Token${mintTokenAmount > 1 ? "s" : ""}`
               ) : (
                 "Create Stamp"
               )}

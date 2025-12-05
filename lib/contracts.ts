@@ -65,6 +65,23 @@ export const TMAP_DISHES_ABI = [
       { name: "actualCost", type: "uint256" },
     ],
   },
+  {
+    name: "getMarketCap",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "dishId", type: "bytes32" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "getBalance",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "user", type: "address" },
+      { name: "dishId", type: "bytes32" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+  },
 ] as const;
 
 // ERC20 ABI for USDC

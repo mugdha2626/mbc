@@ -27,7 +27,14 @@ export async function POST(request: NextRequest) {
   try {
     const body: MintRequest = await request.json();
 
-    const { dishId, minterFid, minterAddress, usdcAmount, tokensReceived, referrerFid } = body;
+    const {
+      dishId,
+      minterFid,
+      minterAddress,
+      usdcAmount,
+      tokensReceived,
+      referrerFid,
+    } = body;
 
     if (!dishId || !minterFid || !minterAddress) {
       return NextResponse.json(
@@ -59,16 +66,31 @@ export async function POST(request: NextRequest) {
     // dishResult is a tuple: [creator, totalSupply, createdAt, metadata, exists]
     const totalSupply = Number(dishResult[1]);
 
-    // Check if user already holds this dish
+    // Get market cap from contract (uses bonding curve formula)
+    const marketCapResult = await publicClient.readContract({
+      address: TMAP_DISHES_ADDRESS,
+      abi: TMAP_DISHES_ABI,
+      functionName: "getMarketCap",
+      args: [dishId as Hash],
+    });
+    const marketCap = Number(marketCapResult) / 1_000_000; // Convert from 6 decimals
+
+    // Check if user already has this dish in their portfolio (users.portfolio.dishes)
     const existingHolder = await db.collection("users").findOne({
       fid: minterFid,
       "portfolio.dishes.dish": dishId,
     });
 
+    // User is a new holder if they don't have this dish in their portfolio yet
     const isNewHolder = !existingHolder;
 
-    // Calculate market cap
-    const marketCap = currentPrice * totalSupply;
+    console.log("Holder check:", {
+      dishId,
+      minterFid,
+      tokensReceived,
+      existingHolderInDb: !!existingHolder,
+      isNewHolder,
+    });
 
     // Update dish document
     const dishUpdate: Record<string, unknown> = {
@@ -87,33 +109,27 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    await db.collection("dishes").updateOne(
-      { dishId },
-      dishUpdateQuery
-    );
+    await db.collection("dishes").updateOne({ dishId }, dishUpdateQuery);
 
     // Update minter's portfolio
     if (isNewHolder) {
       // Add new dish to portfolio
-      await db.collection("users").updateOne(
-        { fid: minterFid },
+      await db.collection("users").updateOne({ fid: minterFid }, {
+        $push: {
+          "portfolio.dishes": {
+            dish: dishId,
+            quantity: tokensReceived,
+            return: 0,
+            referredBy: referrerFid || null,
+            referredTo: [],
+          },
+        },
+        $inc: {
+          "portfolio.totalInvested": usdcAmount,
+        },
+        $set: { updatedAt: now },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        {
-          $push: {
-            "portfolio.dishes": {
-              dish: dishId,
-              quantity: tokensReceived,
-              return: 0,
-              referredBy: referrerFid || null,
-              referredTo: [],
-            },
-          },
-          $inc: {
-            "portfolio.totalInvested": usdcAmount,
-          },
-          $set: { updatedAt: now },
-        } as any
-      );
+      } as any);
     } else {
       // Update existing dish in portfolio
       await db.collection("users").updateOne(
@@ -130,10 +146,9 @@ export async function POST(request: NextRequest) {
 
     // If there's a referrer, update their referral tracking
     if (referrerFid && isNewHolder) {
-      await db.collection("users").updateOne(
-        { fid: referrerFid, "portfolio.dishes.dish": dishId },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        {
+      await db
+        .collection("users")
+        .updateOne({ fid: referrerFid, "portfolio.dishes.dish": dishId }, {
           $push: {
             "portfolio.dishes.$.referredTo": minterFid,
           },
@@ -141,8 +156,8 @@ export async function POST(request: NextRequest) {
             reputationScore: 10, // Reward for successful referral
           },
           $set: { updatedAt: now },
-        } as any
-      );
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
     }
 
     // Update minter's reputation score
@@ -162,6 +177,7 @@ export async function POST(request: NextRequest) {
         totalHolders: isNewHolder ? "incremented" : "unchanged",
         marketCap,
       },
+      isNewHolder,
     });
   } catch (error) {
     console.error("Error updating dish after mint:", error);
