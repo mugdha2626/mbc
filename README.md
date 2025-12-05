@@ -22,7 +22,7 @@ Note: Require Base USDC on the testnet. Use the "Get $5" Faucet in case you dont
 - **Bonding Curve Pricing**: Price = `1 + (supply × 0.125)` USDC
 - **$10 Max Spend**: Per user, per dish
 - **70% Sell Value**: Sell anytime and get 70% of current market value
-- **2.5% Referral Rewards**: Share dishes and earn 2.5% referrak reward on every mint (check the rewards page!)
+- **2.5% Referral Rewards**: Share dishes and earn 2.5% referral reward on every mint (check the rewards page!)
 - **2.5% Holder Rewards**: Existing holders earn when others mint (check the holdings fee in the rewards page!)
 - **Geo-Verification**: Must be at the restaurant to create a dish (within 200m)
 - **Farcaster Integration**: Native social sharing and wallet connection and earn token referral fee.
