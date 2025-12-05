@@ -32,11 +32,37 @@ Note: Require Base USDC on the testnet. Use the "Get $5" Faucet in case you dont
 | Layer | Tech |
 |-------|------|
 | Frontend | Next.js 15, TypeScript, Tailwind CSS |
-| Blockchain | Base Sepolia, Solidity, Hardhat, Farcaster |
-| Database | MongoDB |
+| Blockchain | Base Sepolia, Solidity 0.8.24, Hardhat |
+| Token | ERC1155 (OpenZeppelin) |
+| Database | MongoDB Atlas |
 | Auth | Farcaster Mini-App SDK |
-| Wallet | wagmi, viem |
+| Wallet | wagmi v2, viem, Farcaster Wallet Connector |
+| Paymaster | Coinbase Paymaster (via Farcaster) |
 | Maps | Google Maps API |
+
+## Architecture
+
+### Gasless Transactions
+All transactions are gasless for users via **Coinbase Paymaster** integrated through Farcaster's wallet infrastructure. We use wagmi's `useSendCalls` hook with the `farcasterMiniApp` connector which automatically routes transactions through Farcaster's sponsored transaction flow.
+
+### Bonding Curve Math
+Linear bonding curve with arithmetic series pricing:
+- **Base Price**: $0.10 USDC (1,000,000 in 6 decimals)
+- **Slope**: $0.0125 per token (12,500 in 6 decimals)
+- **Price Formula**: `Price(n) = 0.1 + (n × 0.0125)` where n = current supply
+- **Mint Cost**: Uses arithmetic series sum `Cost = n/2 × (firstPrice + lastPrice)`
+- **Sell Value**: 70% of current market value (one-way curve)
+
+### Fee Distribution (5% total on mint)
+| Fee | Recipient | Purpose |
+|-----|-----------|---------|
+| 2.5% | Referrer | Incentivize sharing |
+| 2.5% | Holder Pool | Time-weighted rewards for existing holders |
+
+### Reward Calculation
+Holder rewards use a time-weighted distribution model:
+- `rewardPerToken = rewardPerTokenStored + (rewardFee × 1e18 / totalSupply)`
+- `earned = balance × (rewardPerToken - userRewardPerTokenPaid)`
 
 ## Smart Contract
 
@@ -48,12 +74,24 @@ Network: Base Sepolia (Chain ID: 84532)
 USDC: 0x036CbD53842c5426634e7929541eC2318f3dCF7e
 ```
 
-Key functions:
-- `createDish(bytes32 dishId, string metadata)` - Create a new dish
-- `mint(bytes32 dishId, uint256 usdcAmount, address referrer)` - Mint stamps
-- `sell(bytes32 dishId, uint256 tokenAmount)` - Sell stamps for USDC
-- `claimRewards(bytes32 dishId)` - Claim holder rewards
-- `claimReferralRewards()` - Claim referral earnings
+### Contract Functions
+
+| Function | Description |
+|----------|-------------|
+| `createDish(bytes32, string)` | Create new dish with metadata |
+| `mint(bytes32, uint256, address)` | Mint tokens with USDC, optional referrer |
+| `sell(bytes32, uint256)` | Sell tokens back for 70% value |
+| `claimRewards(bytes32)` | Claim holder rewards for a dish |
+| `claimReferralRewards()` | Claim accumulated referral earnings |
+| `getCurrentPrice(bytes32)` | Get current token price |
+| `getTokensForUsdc(bytes32, uint256)` | Calculate tokens for USDC amount |
+| `getSellValue(bytes32, uint256)` | Get sell value for tokens |
+
+### Security
+- OpenZeppelin `ReentrancyGuard` on all state-changing functions
+- `Ownable` for admin functions
+- $10 max spend per user per dish (prevents whale manipulation)
+- USDC approval required before minting
 
 ## Local Development
 
