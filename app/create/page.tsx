@@ -1303,43 +1303,59 @@ export default function CreatePage() {
             {[1, 2, 3].map((s) => (
               <div
                 key={s}
-                className={`flex-1 h-1 ${
-                  s < step ? "bg-primary-dark" : "bg-card-border"
-                }`}
+                className={`flex-1 h-1 ${s < step ? "" : "bg-card-border"}`}
+                style={
+                  s < step
+                    ? { backgroundColor: "var(--primary-dark)" }
+                    : undefined
+                }
               />
             ))}
           </div>
           {/* Step circles */}
-          {[1, 2, 3, 4].map((s) => (
-            <div
-              key={s}
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium z-10 ${
-                s === step
-                  ? "bg-primary-dark text-white border-2 border-primary-dark"
-                  : s < step
-                  ? "bg-primary-dark text-white border-2 border-primary-dark"
-                  : "bg-transparent text-primary-dark border-2 border-primary-dark"
-              }`}
-            >
-              {s < step ? (
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              ) : (
-                s
-              )}
-            </div>
-          ))}
+          {[1, 2, 3, 4].map((s) => {
+            const isCompleted = s < step;
+            const isCurrent = s === step;
+
+            return (
+              <div
+                key={s}
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium z-10 relative ${
+                  isCurrent
+                    ? "text-white border-2"
+                    : isCompleted
+                    ? "text-white border-2"
+                    : "bg-white text-primary-dark border-2 border-primary-dark"
+                }`}
+                style={
+                  isCurrent || isCompleted
+                    ? {
+                        backgroundColor: "var(--primary-dark)",
+                        borderColor: "var(--primary-dark)",
+                      }
+                    : undefined
+                }
+              >
+                {isCompleted ? (
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                ) : (
+                  <span className="font-semibold">{s}</span>
+                )}
+              </div>
+            );
+          })}
         </div>
         <div className="flex justify-between mt-2 text-xs text-primary-text">
           <span>Search</span>
