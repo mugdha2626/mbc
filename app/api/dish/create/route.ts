@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { Dish, DishId, Fid, RestaurantId } from "@/app/interface";
-import { keccak256, toBytes } from "viem";
 import { updateRestaurantRating } from "@/lib/db/restaurants";
+import { keccak256, toBytes } from "viem";
 
 // Extended Dish type for database storage (includes extra fields)
 interface DishDocument extends Dish {
@@ -34,17 +34,17 @@ interface SaveDishRequest extends PrepareDishRequest {
 }
 
 /**
- * Generate a unique dishId by hashing the restaurant name and dish name
- * This creates a bytes32 hash that matches the contract's dishId format
+ * Generate a unique dishId by hashing restaurantId (placeId) and dish name
+ * Uses keccak256 hash to create a deterministic, unique identifier
  */
 export function generateDishId(
-  restaurantName: string,
+  restaurantId: RestaurantId,
   dishName: string
 ): DishId {
-  const combined = `${restaurantName.toLowerCase().trim()}:${dishName
-    .toLowerCase()
-    .trim()}`;
-  return keccak256(toBytes(combined));
+  const combined = `${restaurantId}:${dishName.trim()}`;
+  // Hash the combination using keccak256
+  const hash = keccak256(toBytes(combined));
+  return hash;
 }
 
 /**
@@ -53,17 +53,17 @@ export function generateDishId(
  */
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const restaurantName = searchParams.get("restaurantName");
+  const restaurantId = searchParams.get("restaurantId");
   const dishName = searchParams.get("dishName");
 
-  if (!restaurantName || !dishName) {
+  if (!restaurantId || !dishName) {
     return NextResponse.json(
-      { error: "restaurantName and dishName are required" },
+      { error: "restaurantId and dishName are required" },
       { status: 400 }
     );
   }
 
-  const dishId = generateDishId(restaurantName, dishName);
+  const dishId = generateDishId(restaurantId, dishName);
   const db = await getDb();
 
   // Check if dish exists in database

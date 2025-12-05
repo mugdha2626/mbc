@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { BottomNav } from "@/app/components/layout/BottomNav";
 import { getCurrentPosition, isWithinRange } from "@/lib/geo";
@@ -15,6 +15,9 @@ import {
   parseAbi,
   createPublicClient,
   http,
+  stringToBytes,
+  pad,
+  toHex,
 } from "viem";
 import { baseSepolia } from "viem/chains";
 import { useAccount, useSendCalls, useCallsStatus } from "wagmi";
@@ -34,6 +37,16 @@ const erc20Abi = parseAbi([
 const tmapDishesAbi = parseAbi([
   "function createDish(bytes32 dishId, string metadata)",
   "function mint(bytes32 dishId, uint256 usdcAmount, address referrer)",
+  "function getRemainingAllowance(address user, bytes32 dishId) view returns (uint256)",
+  "function getTokensForUsdc(bytes32 dishId, uint256 usdcAmount) view returns (uint256 tokenAmount, uint256 actualCost)",
+  "function getCurrentPrice(bytes32 dishId) view returns (uint256)",
+  "function getMintCost(bytes32 dishId, uint256 tokenAmount) view returns (uint256)",
+  "error DishAlreadyExists()",
+  "error DishDoesNotExist()",
+  "error ZeroAmount()",
+  "error ExceedsMaxSpend()",
+  "error InsufficientBalance()",
+  "error TransferFailed()",
 ]);
 
 // Public client for reading
@@ -45,10 +58,9 @@ const publicClient = createPublicClient({
 type CreateStep =
   | "idle"
   | "checking"
-  | "sendingSetup" // Sending approve + createDish
-  | "waitingSetup" // Waiting for approve + createDish
-  | "sendingMint" // Sending mint
-  | "waitingMint" // Waiting for mint
+  | "approving" // Waiting for approve
+  | "creating" // Waiting for createDish
+  | "minting" // Waiting for mint
   | "saving"
   | "complete";
 
@@ -60,19 +72,19 @@ export default function CreatePage() {
   // Wagmi hooks
   const { address, isConnected } = useAccount();
 
-  // First call: Setup (approve + createDish)
+  // Call 1: Approve
   const {
-    sendCalls: sendSetupCalls,
-    data: setupCallsId,
-    isPending: isSetupPending,
-    error: setupError,
-    reset: resetSetup,
+    sendCalls: sendApproveCalls,
+    data: approveCallsId,
+    isPending: isApprovePending,
+    error: approveError,
+    reset: resetApprove,
   } = useSendCalls();
 
-  const { data: setupStatus } = useCallsStatus({
-    id: setupCallsId?.id ?? "",
+  const { data: approveStatus } = useCallsStatus({
+    id: approveCallsId?.id ?? "",
     query: {
-      enabled: !!setupCallsId?.id,
+      enabled: !!approveCallsId?.id,
       refetchInterval: (data) => {
         if (data.state.data?.status === "success") return false;
         return 2000;
@@ -80,7 +92,27 @@ export default function CreatePage() {
     },
   });
 
-  // Second call: Mint
+  // Call 2: CreateDish
+  const {
+    sendCalls: sendCreateDishCalls,
+    data: createDishCallsId,
+    isPending: isCreateDishPending,
+    error: createDishError,
+    reset: resetCreateDish,
+  } = useSendCalls();
+
+  const { data: createDishStatus } = useCallsStatus({
+    id: createDishCallsId?.id ?? "",
+    query: {
+      enabled: !!createDishCallsId?.id,
+      refetchInterval: (data) => {
+        if (data.state.data?.status === "success") return false;
+        return 2000;
+      },
+    },
+  });
+
+  // Call 3: Mint
   const {
     sendCalls: sendMintCalls,
     data: mintCallsId,
@@ -125,8 +157,11 @@ export default function CreatePage() {
   const [dishId, setDishId] = useState<Hash | null>(null);
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
 
-  // Track mint triggered state with ref to avoid race conditions
-  const mintTriggeredRef = useRef(false);
+  // Track what operations are needed (used in useEffect chain)
+  const [needsCreateDish, setNeedsCreateDish] = useState(false);
+
+  // Flag to trigger direct mint (when skipping approve and createDish)
+  const [triggerDirectMint, setTriggerDirectMint] = useState(false);
 
   // Get user's current location for biased search
   const [userLocation, setUserLocation] = useState<{
@@ -155,6 +190,21 @@ export default function CreatePage() {
     console.log("[Debug]", msg);
   };
 
+  // Convert string dishId to bytes32 for contract calls
+  // If already a hex string (hashed), use it directly; otherwise convert
+  const stringToBytes32 = (str: string): Hash => {
+    // If it's already a hex string (starts with 0x and is 66 chars = 32 bytes)
+    if (str.startsWith("0x") && str.length === 66) {
+      return str as Hash;
+    }
+    // Otherwise, convert string to bytes32
+    const bytes = stringToBytes(str);
+    // Truncate to 32 bytes if longer, or pad if shorter
+    const truncated = bytes.slice(0, 32);
+    const padded = pad(truncated, { size: 32 });
+    return toHex(padded) as Hash;
+  };
+
   // Check if status indicates success
   const isStatusSuccess = (
     status:
@@ -175,117 +225,584 @@ export default function CreatePage() {
     return false;
   };
 
-  // Watch for setup calls to be submitted
+  // Watch for approve completion -> go to createDish or mint
   useEffect(() => {
-    if (setupCallsId?.id && createStep === "sendingSetup") {
-      addDebug(`Setup calls submitted: ${setupCallsId.id.slice(0, 10)}...`);
-      setCreateStep("waitingSetup");
-    }
-  }, [setupCallsId?.id, createStep]);
+    if (createStep === "approving" && approveStatus) {
+      console.log("Approve status:", approveStatus);
 
-  // Watch for setup completion -> trigger mint
-  useEffect(() => {
-    if (
-      createStep === "waitingSetup" &&
-      setupStatus &&
-      !mintTriggeredRef.current
-    ) {
-      console.log("Setup status:", setupStatus);
-
-      if (isStatusSuccess(setupStatus)) {
-        addDebug("Setup complete! Starting mint...");
-        mintTriggeredRef.current = true;
-        triggerMint();
-      } else if (setupStatus.status === "failure") {
-        const receipts = setupStatus.receipts as
-          | Array<{ transactionHash?: string }>
-          | undefined;
-        const txHash = receipts?.[0]?.transactionHash || "unknown";
-        setCreateError(`Setup failed. Tx: ${txHash}`);
+      if (isStatusSuccess(approveStatus)) {
+        addDebug("Approve complete!");
+        // Next: createDish if needed, otherwise mint
+        if (needsCreateDish) {
+          startCreateDish();
+        } else {
+          startMint();
+        }
+      } else if (approveStatus.status === "failure") {
+        setCreateError("Approve failed");
         setCreateStep("idle");
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setupStatus, createStep]);
+  }, [approveStatus, createStep]);
 
-  // Watch for mint calls to be submitted
+  // Watch for createDish completion -> go to mint
   useEffect(() => {
-    if (mintCallsId?.id && createStep === "sendingMint") {
-      addDebug(`Mint call submitted: ${mintCallsId.id.slice(0, 10)}...`);
-      setCreateStep("waitingMint");
+    if (createStep === "creating" && createDishStatus) {
+      console.log("CreateDish status:", createDishStatus);
+
+      if (isStatusSuccess(createDishStatus)) {
+        addDebug("CreateDish complete!");
+        startMint();
+      } else if (createDishStatus.status === "failure") {
+        setCreateError("CreateDish failed");
+        setCreateStep("idle");
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createDishStatus, createStep]);
+
+  // Watch for mintCallsId to be set (confirms transaction was submitted)
+  useEffect(() => {
+    if (createStep === "minting") {
+      if (mintCallsId?.id) {
+        addDebug(`Mint call ID received: ${mintCallsId.id.slice(0, 10)}...`);
+      } else {
+        // If we're in minting step but no call ID after a delay, something went wrong
+        const timer = setTimeout(() => {
+          if (createStep === "minting" && !mintCallsId?.id) {
+            addDebug("Warning: Still waiting for mint call ID...");
+          }
+        }, 3000);
+        return () => clearTimeout(timer);
+      }
     }
   }, [mintCallsId?.id, createStep]);
 
   // Watch for mint completion -> save to database
   useEffect(() => {
-    if (createStep === "waitingMint" && mintStatus) {
-      console.log("Mint status:", mintStatus);
+    if (createStep === "minting") {
+      // Wait for mintCallsId to be set
+      if (!mintCallsId?.id) {
+        return;
+      }
+
+      if (!mintStatus) {
+        addDebug("Waiting for mint status...");
+        return;
+      }
+
+      console.log("Mint status full:", mintStatus);
+      addDebug(`Mint status: ${mintStatus.status || "undefined"}`);
 
       if (isStatusSuccess(mintStatus)) {
-        addDebug("Mint complete! Saving to database...");
+        addDebug("Mint complete! Saving...");
         setCreateStep("saving");
         saveToDatabase();
       } else if (mintStatus.status === "failure") {
+        // Log the full status object for debugging
+        console.log(
+          "Mint failure - full status object:",
+          JSON.stringify(
+            mintStatus,
+            (_, v) => (typeof v === "bigint" ? v.toString() : v),
+            2
+          )
+        );
+
         const receipts = mintStatus.receipts as
-          | Array<{ transactionHash?: string }>
+          | Array<{ transactionHash?: string; status?: string | number }>
           | undefined;
-        const txHash = receipts?.[0]?.transactionHash || "unknown";
-        setCreateError(`Mint failed. Tx: ${txHash}`);
+
+        // Check for error message in status object
+        const statusWithError = mintStatus as {
+          error?: { message?: string };
+          message?: string;
+        };
+        const errorMessage =
+          statusWithError.error?.message || statusWithError.message;
+        if (errorMessage) {
+          addDebug(`Error message: ${errorMessage}`);
+        }
+
+        // Check if receipts show success despite overall failure status
+        if (receipts && receipts.length > 0) {
+          const allSuccess = receipts.every((r) => {
+            const s = r.status;
+            return s === "success" || s === "0x1" || s === 1 || s === "1";
+          });
+
+          if (allSuccess) {
+            addDebug("All receipts successful despite failure status!");
+            setCreateStep("saving");
+            saveToDatabase();
+            return;
+          }
+
+          const txHash = receipts[0]?.transactionHash || "none";
+          const receiptStatus = receipts[0]?.status;
+          addDebug(
+            `Failure - tx: ${txHash || "none"}, status: ${
+              receiptStatus || "none"
+            }`
+          );
+          setCreateError(
+            txHash !== "none"
+              ? `Mint failed. Tx: ${txHash.slice(
+                  0,
+                  10
+                )}... Status: ${receiptStatus}`
+              : "Mint failed - no transaction sent"
+          );
+        } else {
+          // No receipts - transaction might not have been sent or failed early
+          addDebug("No receipts in failure response");
+          addDebug(`Status keys: ${Object.keys(mintStatus).join(", ")}`);
+          addDebug(`mintCallsId exists: ${!!mintCallsId?.id}`);
+
+          // Check for any error details in the status object
+          const statusWithDetails = mintStatus as {
+            error?: { message?: string };
+            reason?: string;
+          };
+          const statusError =
+            statusWithDetails.error ||
+            (statusWithDetails.reason
+              ? { message: statusWithDetails.reason }
+              : undefined);
+          if (statusError) {
+            addDebug(`Status error: ${JSON.stringify(statusError)}`);
+          }
+
+          // If we have a call ID but no receipts, the transaction might have been rejected or reverted
+          if (mintCallsId?.id) {
+            addDebug(
+              "Call ID exists but no receipts - transaction may have been rejected or reverted"
+            );
+            const errorMsg =
+              errorMessage ||
+              statusError?.message ||
+              "Transaction was rejected or reverted";
+            setCreateError(
+              `Mint failed: ${errorMsg}. Please check if you have sufficient USDC allowance and the dish exists on-chain.`
+            );
+          } else {
+            // This shouldn't happen if mintStatus exists, but handle it anyway
+            addDebug("No call ID - transaction was never sent");
+            setCreateError(
+              "Mint transaction failed to send. Please check your wallet connection."
+            );
+          }
+        }
         setCreateStep("idle");
+      } else if (mintStatus.status === "pending") {
+        addDebug("Mint still pending...");
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mintStatus, createStep]);
+  }, [mintStatus, createStep, mintCallsId?.id]);
 
   // Watch for errors
   useEffect(() => {
-    if (
-      setupError &&
-      (createStep === "sendingSetup" || createStep === "waitingSetup")
-    ) {
-      setCreateError(setupError.message || "Setup transaction failed");
+    if (approveError && createStep === "approving") {
+      setCreateError(approveError.message || "Approve failed");
       setCreateStep("idle");
     }
-  }, [setupError, createStep]);
+  }, [approveError, createStep]);
 
   useEffect(() => {
-    if (
-      mintError &&
-      (createStep === "sendingMint" || createStep === "waitingMint")
-    ) {
-      setCreateError(mintError.message || "Mint transaction failed");
+    if (createDishError && createStep === "creating") {
+      setCreateError(createDishError.message || "CreateDish failed");
+      setCreateStep("idle");
+    }
+  }, [createDishError, createStep]);
+
+  useEffect(() => {
+    if (mintError && createStep === "minting") {
+      console.error("Mint call error:", mintError);
+      addDebug(`Mint call error: ${mintError.message || "Unknown"}`);
+      setCreateError(mintError.message || "Mint transaction failed to send");
       setCreateStep("idle");
     }
   }, [mintError, createStep]);
 
-  // Trigger the mint call
-  const triggerMint = () => {
-    if (!dishId || !TMAP_DISHES_ADDRESS) return;
+  // Watch for direct mint trigger (when skipping approve and createDish)
+  useEffect(() => {
+    if (triggerDirectMint && dishId) {
+      setTriggerDirectMint(false);
+      startMint();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [triggerDirectMint, dishId]);
 
-    setCreateStep("sendingMint");
-    addDebug("Sending mint transaction...");
+  // Start createDish call
+  const startCreateDish = () => {
+    if (!dishId || !TMAP_DISHES_ADDRESS || !selectedRestaurant) return;
 
-    sendMintCalls({
+    addDebug("Sending createDish...");
+    setCreateStep("creating");
+
+    const metadata = JSON.stringify({
+      name: dishName.trim(),
+      description: dishDescription.trim() || "",
+      restaurant: selectedRestaurant.name,
+      restaurantId: selectedRestaurant.id,
+      creator: userFid,
+    });
+
+    // Convert string dishId to bytes32 for contract
+    const dishIdBytes32 = stringToBytes32(dishId);
+
+    sendCreateDishCalls({
       calls: [
         {
           to: TMAP_DISHES_ADDRESS,
           data: encodeFunctionData({
             abi: tmapDishesAbi,
-            functionName: "mint",
-            args: [dishId, INITIAL_MINT_AMOUNT, zeroAddress],
+            functionName: "createDish",
+            args: [dishIdBytes32, metadata],
           }),
         },
       ],
     });
   };
 
+  // Start mint call
+  const startMint = async () => {
+    if (!dishId || !TMAP_DISHES_ADDRESS || !address) {
+      addDebug(
+        "Cannot mint: missing dishId, contract address, or wallet address"
+      );
+      return;
+    }
+
+    addDebug("Sending mint to dish ID: " + dishId);
+    setCreateStep("minting");
+
+    try {
+      // Convert string dishId to bytes32 for contract
+      const dishIdBytes32 = stringToBytes32(dishId);
+      addDebug(`Converted dishId to bytes32: ${dishIdBytes32.slice(0, 10)}...`);
+
+      // Verify dish exists on-chain before minting (check first, before calculating cost)
+      let dishExists = false;
+      let retries = 0;
+      const maxRetries = 5;
+
+      while (!dishExists && retries < maxRetries) {
+        try {
+          addDebug(
+            `Verifying dish exists on-chain... (attempt ${
+              retries + 1
+            }/${maxRetries})`
+          );
+          const onChainDish = await publicClient.readContract({
+            address: TMAP_DISHES_ADDRESS,
+            abi: [
+              {
+                name: "dishes",
+                type: "function",
+                stateMutability: "view",
+                inputs: [{ name: "", type: "bytes32" }],
+                outputs: [
+                  { name: "creator", type: "address" },
+                  { name: "totalSupply", type: "uint256" },
+                  { name: "createdAt", type: "uint256" },
+                  { name: "metadata", type: "string" },
+                  { name: "exists", type: "bool" },
+                ],
+              },
+            ] as const,
+            functionName: "dishes",
+            args: [dishIdBytes32],
+          });
+          dishExists = onChainDish[4];
+          addDebug(`Dish exists on-chain: ${dishExists}`);
+
+          if (dishExists) {
+            break;
+          }
+
+          // If dish doesn't exist and we haven't exhausted retries, wait and retry
+          if (retries < maxRetries - 1) {
+            addDebug(`Dish not found yet, waiting 1 second before retry...`);
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+          retries++;
+        } catch (err) {
+          console.error("Error checking dish existence:", err);
+          addDebug(`Error checking dish: ${err}`);
+          // If it's a contract error (dish doesn't exist), retry
+          if (retries < maxRetries - 1) {
+            addDebug(`Error occurred, waiting 1 second before retry...`);
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            retries++;
+          } else {
+            setCreateError("Failed to verify dish existence on-chain.");
+            setCreateStep("idle");
+            return;
+          }
+        }
+      }
+
+      if (!dishExists) {
+        setCreateError(
+          "Dish does not exist on-chain. The dish creation may not have been confirmed yet. Please try again."
+        );
+        setCreateStep("idle");
+        return;
+      }
+
+      // Calculate the mint amount dynamically using getMintCost for 1 token
+      let mintAmount: bigint;
+      try {
+        addDebug("Calculating mint amount for 1 token...");
+        mintAmount = await publicClient.readContract({
+          address: TMAP_DISHES_ADDRESS,
+          abi: tmapDishesAbi,
+          functionName: "getMintCost",
+          args: [dishIdBytes32, BigInt(1)],
+        });
+        addDebug(`Mint amount: ${Number(mintAmount) / 1e6} USDC (for 1 token)`);
+      } catch (err) {
+        console.error("Error calculating mint amount:", err);
+        addDebug(`Error calculating mint amount: ${err}`);
+        setCreateError("Failed to calculate mint amount. Please try again.");
+        setCreateStep("idle");
+        return;
+      }
+
+      // Check USDC token allowance
+      const finalAllowance = await checkAllowance(address, TMAP_DISHES_ADDRESS);
+      addDebug(`USDC token allowance: ${Number(finalAllowance) / 1e6} USDC`);
+      if (finalAllowance < mintAmount) {
+        addDebug("USDC token allowance insufficient after approval!");
+        setCreateError(
+          `USDC token allowance is insufficient. Have ${
+            Number(finalAllowance) / 1e6
+          } USDC, need ${Number(mintAmount) / 1e6} USDC.`
+        );
+        setCreateStep("idle");
+        return;
+      }
+
+      // Check remaining dish allowance (max $10 per user per dish)
+      try {
+        addDebug("Checking remaining dish allowance (max $10 per dish)...");
+        const remainingDishAllowance = await publicClient.readContract({
+          address: TMAP_DISHES_ADDRESS,
+          abi: tmapDishesAbi,
+          functionName: "getRemainingAllowance",
+          args: [address, dishIdBytes32],
+        });
+        addDebug(
+          `Remaining dish allowance: ${
+            Number(remainingDishAllowance) / 1e6
+          } USDC`
+        );
+
+        if (remainingDishAllowance < mintAmount) {
+          const spent = 10 - Number(remainingDishAllowance) / 1e6;
+          setCreateError(
+            `You've reached the $10 max spend limit for this dish. You've already spent $${spent.toFixed(
+              2
+            )}. Remaining: $${(Number(remainingDishAllowance) / 1e6).toFixed(
+              2
+            )}`
+          );
+          setCreateStep("idle");
+          return;
+        }
+      } catch (err) {
+        console.error("Error checking remaining dish allowance:", err);
+        addDebug(`Error checking dish allowance: ${err}`);
+        // Continue anyway - the simulation will catch it
+      }
+
+      // Check how many tokens will be minted with this amount
+      try {
+        addDebug("Checking how many tokens will be minted...");
+        const [tokenAmount, actualCost] = await publicClient.readContract({
+          address: TMAP_DISHES_ADDRESS,
+          abi: tmapDishesAbi,
+          functionName: "getTokensForUsdc",
+          args: [dishIdBytes32, mintAmount],
+        });
+        addDebug(
+          `Will mint ${tokenAmount.toString()} tokens for $${
+            Number(actualCost) / 1e6
+          } USDC`
+        );
+
+        if (tokenAmount === BigInt(0)) {
+          // Check the current price to suggest minimum amount
+          try {
+            const currentPrice = await publicClient.readContract({
+              address: TMAP_DISHES_ADDRESS,
+              abi: tmapDishesAbi,
+              functionName: "getCurrentPrice",
+              args: [dishIdBytes32],
+            });
+            const minAmountForOneToken = await publicClient.readContract({
+              address: TMAP_DISHES_ADDRESS,
+              abi: tmapDishesAbi,
+              functionName: "getMintCost",
+              args: [dishIdBytes32, BigInt(1)],
+            });
+            setCreateError(
+              `Mint failed: The amount you're trying to mint ($${
+                Number(mintAmount) / 1e6
+              }) would result in 0 tokens. The current price per token is $${
+                Number(currentPrice) / 1e6
+              }. You need at least $${
+                Number(minAmountForOneToken) / 1e6
+              } to mint 1 token.`
+            );
+          } catch {
+            // If we can't get price info, show generic error
+            setCreateError(
+              `Mint failed: The amount you're trying to mint ($${
+                Number(mintAmount) / 1e6
+              }) would result in 0 tokens. This usually happens when the dish supply is high and the bonding curve price is too high. Please try a larger amount.`
+            );
+          }
+          setCreateStep("idle");
+          return;
+        }
+      } catch (err) {
+        console.error("Error checking token amount:", err);
+        addDebug(`Error checking token amount: ${err}`);
+        // Continue anyway - the simulation will catch it
+      }
+
+      // Simulate the transaction first to check if it will succeed
+      try {
+        addDebug("Simulating mint transaction...");
+        await publicClient.simulateContract({
+          address: TMAP_DISHES_ADDRESS,
+          abi: tmapDishesAbi,
+          functionName: "mint",
+          args: [dishIdBytes32, mintAmount, zeroAddress],
+          account: address,
+        });
+        addDebug("Simulation successful - transaction should work");
+      } catch (simError) {
+        console.error("Simulation error full:", simError);
+        const error = simError as {
+          shortMessage?: string;
+          message?: string;
+          data?: `0x${string}`;
+          cause?: {
+            data?: `0x${string}`;
+            errorName?: string;
+            name?: string;
+          };
+          name?: string;
+        };
+
+        // Extract error name (now that ABI includes errors, viem should decode it)
+        const errorName =
+          error?.cause?.errorName || error?.cause?.name || error?.name;
+        const errorData = error?.data || error?.cause?.data;
+        const errorDataStr =
+          typeof errorData === "string" ? errorData : String(errorData || "");
+
+        if (errorDataStr) {
+          addDebug(`Error data: ${errorDataStr}`);
+        }
+        if (errorName) {
+          addDebug(`Error name: ${errorName}`);
+        }
+
+        // Handle specific errors
+        if (
+          errorName === "ExceedsMaxSpend" ||
+          (errorDataStr && errorDataStr.startsWith("0x1f2a2005"))
+        ) {
+          setCreateError(
+            `Mint failed: You've reached the $10 maximum spend limit for this dish. You cannot mint more tokens for this dish.`
+          );
+        } else if (errorName === "DishDoesNotExist") {
+          setCreateError(
+            `Mint failed: This dish does not exist on-chain. Please create the dish first.`
+          );
+        } else if (errorName === "ZeroAmount") {
+          // Try to get current price for better error message
+          try {
+            const currentPrice = await publicClient.readContract({
+              address: TMAP_DISHES_ADDRESS,
+              abi: tmapDishesAbi,
+              functionName: "getCurrentPrice",
+              args: [dishIdBytes32],
+            });
+            const minAmountForOneToken = await publicClient.readContract({
+              address: TMAP_DISHES_ADDRESS,
+              abi: tmapDishesAbi,
+              functionName: "getMintCost",
+              args: [dishIdBytes32, BigInt(1)],
+            });
+            setCreateError(
+              `Mint failed: The amount you're trying to mint ($${
+                Number(mintAmount) / 1e6
+              }) would result in 0 tokens. The current price per token is $${
+                Number(currentPrice) / 1e6
+              }. You need at least $${
+                Number(minAmountForOneToken) / 1e6
+              } to mint 1 token.`
+            );
+          } catch {
+            // If we can't get price info, show generic error
+            setCreateError(
+              `Mint failed: The amount you're trying to mint ($${
+                Number(mintAmount) / 1e6
+              }) would result in 0 tokens. The bonding curve price is too high for this amount. Please try a larger amount.`
+            );
+          }
+        } else {
+          const errorMsg =
+            errorName ||
+            error?.shortMessage ||
+            error?.message ||
+            String(simError);
+          addDebug(`Simulation failed: ${errorMsg}`);
+          setCreateError(
+            `Mint will fail: ${errorMsg}. Please check allowance and dish existence.`
+          );
+        }
+        setCreateStep("idle");
+        return;
+      }
+
+      // If simulation passed, send the actual transaction
+      addDebug("Simulation passed, sending mint transaction...");
+      sendMintCalls({
+        calls: [
+          {
+            to: TMAP_DISHES_ADDRESS,
+            data: encodeFunctionData({
+              abi: tmapDishesAbi,
+              functionName: "mint",
+              args: [dishIdBytes32, mintAmount, zeroAddress],
+            }),
+          },
+        ],
+      });
+      addDebug("sendMintCalls executed");
+    } catch (err) {
+      console.error("Error in startMint:", err);
+      addDebug(`Error calling sendMintCalls: ${err}`);
+      setCreateError(`Failed to send mint: ${err}`);
+      setCreateStep("idle");
+    }
+  };
+
   // Check if dish exists in database
   const checkDishExists = async (
-    restaurantName: string,
+    restaurantId: string,
     dishNameParam: string
   ) => {
     const params = new URLSearchParams({
-      restaurantName,
+      restaurantId,
       dishName: dishNameParam,
     });
     const res = await fetch(`/api/dish/create?${params}`);
@@ -383,9 +900,11 @@ export default function CreatePage() {
     // Reset state
     setCreateError("");
     setDebugInfo([]);
-    resetSetup();
+    resetApprove();
+    resetCreateDish();
     resetMint();
-    mintTriggeredRef.current = false;
+    setNeedsCreateDish(false);
+    setTriggerDirectMint(false);
     setCreateStep("checking");
 
     addDebug(`TMAP: ${TMAP_DISHES_ADDRESS.slice(0, 10)}...`);
@@ -395,12 +914,12 @@ export default function CreatePage() {
     try {
       // Check if dish exists
       const { exists, dishId: fetchedDishId } = await checkDishExists(
-        selectedRestaurant.name,
+        selectedRestaurant.id,
         dishName
       );
-      const targetDishId = fetchedDishId as Hash;
+      const targetDishId = fetchedDishId; // This is now a string like "restaurantId:dishName"
       setDishId(targetDishId);
-      addDebug(`DishId: ${targetDishId.slice(0, 10)}...`);
+      addDebug(`DishId: ${targetDishId}`);
       addDebug(`DB exists: ${exists}`);
 
       // Check balance
@@ -413,6 +932,8 @@ export default function CreatePage() {
       }
 
       // Check if dish exists on-chain
+      // Convert string dishId to bytes32 for contract call
+      const dishIdBytes32 = stringToBytes32(targetDishId);
       let dishExistsOnChain = false;
       try {
         const onChainDish = await publicClient.readContract({
@@ -433,77 +954,41 @@ export default function CreatePage() {
             },
           ] as const,
           functionName: "dishes",
-          args: [targetDishId],
+          args: [dishIdBytes32],
         });
         dishExistsOnChain = onChainDish[4];
         addDebug(`On-chain: ${dishExistsOnChain}`);
-      } catch {
-        throw new Error("Cannot read TmapDishes contract. Is it deployed?");
+      } catch (err) {
+        console.error("Error checking on-chain dish:", err);
+        addDebug(`On-chain check error: ${err}`);
+        // Don't throw - just assume it doesn't exist on-chain
+        dishExistsOnChain = false;
       }
 
       // Check allowance
       const allowance = await checkAllowance(address, TMAP_DISHES_ADDRESS);
       addDebug(`Allowance: ${Number(allowance) / 1e6} USDC`);
-      const needsApprove = allowance < INITIAL_MINT_AMOUNT;
+      const requiresCreateDish = !dishExistsOnChain;
 
-      // Build setup calls (approve + createDish if needed)
-      const setupCalls: { to: Address; data: `0x${string}` }[] = [];
+      // Store what we need for the chain (used in useEffect)
+      setNeedsCreateDish(requiresCreateDish);
 
-      if (needsApprove) {
-        setupCalls.push({
-          to: USDC_ADDRESS,
-          data: encodeFunctionData({
-            abi: erc20Abi,
-            functionName: "approve",
-            args: [TMAP_DISHES_ADDRESS, INITIAL_MINT_AMOUNT * BigInt(1000)],
-          }),
-        });
-        addDebug("+ approve");
-      }
-
-      if (!dishExistsOnChain) {
-        const metadata = JSON.stringify({
-          name: dishName.trim(),
-          description: dishDescription.trim() || "",
-          restaurant: selectedRestaurant.name,
-          restaurantId: selectedRestaurant.id,
-          creator: userFid,
-        });
-        setupCalls.push({
-          to: TMAP_DISHES_ADDRESS,
-          data: encodeFunctionData({
-            abi: tmapDishesAbi,
-            functionName: "createDish",
-            args: [targetDishId, metadata],
-          }),
-        });
-        addDebug("+ createDish");
-      }
-
-      // If we have setup calls, send them first
-      if (setupCalls.length > 0) {
-        setCreateStep("sendingSetup");
-        addDebug(`Sending ${setupCalls.length} setup call(s)...`);
-
-        sendSetupCalls({ calls: setupCalls });
-      } else {
-        // No setup needed, go directly to mint
-        addDebug("No setup needed, going to mint...");
-        setCreateStep("sendingMint");
-
-        sendMintCalls({
-          calls: [
-            {
-              to: TMAP_DISHES_ADDRESS,
-              data: encodeFunctionData({
-                abi: tmapDishesAbi,
-                functionName: "mint",
-                args: [targetDishId, INITIAL_MINT_AMOUNT, zeroAddress],
-              }),
-            },
-          ],
-        });
-      }
+      // Always approve before minting (even if allowance seems sufficient)
+      // This ensures the approval is fresh and avoids any stale allowance issues
+      addDebug("Starting with approve (always approve before minting)...");
+      setCreateStep("approving");
+      sendApproveCalls({
+        calls: [
+          {
+            to: USDC_ADDRESS,
+            data: encodeFunctionData({
+              abi: erc20Abi,
+              functionName: "approve",
+              args: [TMAP_DISHES_ADDRESS, INITIAL_MINT_AMOUNT * BigInt(1000)],
+            }),
+          },
+        ],
+      });
     } catch (err) {
       console.error("Error:", err);
       setCreateError(err instanceof Error ? err.message : "Failed");
@@ -561,14 +1046,12 @@ export default function CreatePage() {
     switch (createStep) {
       case "checking":
         return "Checking...";
-      case "sendingSetup":
-        return "Confirm Setup...";
-      case "waitingSetup":
-        return "Waiting for Setup...";
-      case "sendingMint":
-        return "Confirm Mint...";
-      case "waitingMint":
-        return "Waiting for Mint...";
+      case "approving":
+        return "Approving...";
+      case "creating":
+        return "Creating...";
+      case "minting":
+        return "Minting...";
       case "saving":
         return "Saving...";
       case "complete":
@@ -582,14 +1065,12 @@ export default function CreatePage() {
     switch (createStep) {
       case "checking":
         return "Checking dish and wallet...";
-      case "sendingSetup":
-        return "Please confirm the setup transaction (approve + createDish)";
-      case "waitingSetup":
-        return "Waiting for setup confirmation...";
-      case "sendingMint":
-        return "Please confirm the mint transaction";
-      case "waitingMint":
-        return "Waiting for mint confirmation...";
+      case "approving":
+        return "Please approve USDC spending...";
+      case "creating":
+        return "Please confirm dish creation...";
+      case "minting":
+        return "Please confirm minting...";
       case "saving":
         return "Saving to database...";
       default:
@@ -598,7 +1079,11 @@ export default function CreatePage() {
   };
 
   const isCreating = createStep !== "idle" && createStep !== "complete";
-  const displayError = createError || setupError?.message || mintError?.message;
+  const displayError =
+    createError ||
+    approveError?.message ||
+    createDishError?.message ||
+    mintError?.message;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -951,7 +1436,12 @@ export default function CreatePage() {
 
             <button
               onClick={handleCreateDish}
-              disabled={isCreating || isSetupPending || isMintPending}
+              disabled={
+                isCreating ||
+                isApprovePending ||
+                isCreateDishPending ||
+                isMintPending
+              }
               className="w-full btn-primary disabled:opacity-60 font-semibold py-4 rounded-xl flex items-center justify-center gap-2"
             >
               {isCreating ? (

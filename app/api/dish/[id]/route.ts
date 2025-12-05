@@ -10,14 +10,17 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: dishId } = await params;
+    const { id: dishIdParam } = await params;
 
-    if (!dishId) {
+    if (!dishIdParam) {
       return NextResponse.json(
         { error: "Dish ID is required" },
         { status: 400 }
       );
     }
+
+    // Decode URL-encoded dishId (e.g., %3A becomes :, %20 becomes space)
+    const dishId = decodeURIComponent(dishIdParam);
 
     const db = await getDb();
 
