@@ -33,6 +33,7 @@ import { useFarcaster } from "@/app/providers/FarcasterProvider";
 import { sdk } from "@farcaster/miniapp-sdk";
 import { navigateBack } from "@/lib/navigation";
 import { InlineFaucetButton } from "@/app/components/ui/InlineFaucetButton";
+import { getCurrentPosition, isWithinRange } from "@/lib/geo";
 
 // ABIs
 const erc20Abi = parseAbi([
@@ -84,6 +85,8 @@ interface DishData {
   restaurantName?: string;
   restaurantAddress?: string;
   restaurantImage?: string;
+  restaurantLatitude?: number;
+  restaurantLongitude?: number;
   creator: number;
   creatorUsername?: string;
   creatorPfp?: string;
@@ -98,7 +101,13 @@ interface DishData {
   yourValue?: number;
 }
 
-type MintStep = "idle" | "checking" | "approving" | "minting" | "complete";
+type MintStep =
+  | "idle"
+  | "verifying_location"
+  | "checking"
+  | "approving"
+  | "minting"
+  | "complete";
 
 export default function DishPageClient() {
   const router = useRouter();
@@ -133,6 +142,10 @@ export default function DishPageClient() {
     null
   );
   const [isSharing, setIsSharing] = useState(false);
+
+  // Location verification state
+  const [locationVerified, setLocationVerified] = useState(false);
+  const [locationDistance, setLocationDistance] = useState<number | null>(null);
 
   // Sell modal state
   const [sellModalOpen, setSellModalOpen] = useState(false);
@@ -457,7 +470,9 @@ export default function DishPageClient() {
       // Get the app URL from environment or fallback to window origin
       const appUrl =
         process.env.NEXT_PUBLIC_APP_URL ||
-        (typeof window !== "undefined" ? window.location.origin : "https://mbc-tau.vercel.app");
+        (typeof window !== "undefined"
+          ? window.location.origin
+          : "https://mbc-tau.vercel.app");
 
       // Build the dish URL with referral parameter
       const referrerParam = user?.fid ? `?ref=${user.fid}` : "";
@@ -492,7 +507,9 @@ export default function DishPageClient() {
       try {
         const fallbackAppUrl =
           process.env.NEXT_PUBLIC_APP_URL ||
-          (typeof window !== "undefined" ? window.location.origin : "https://mbc-tau.vercel.app");
+          (typeof window !== "undefined"
+            ? window.location.origin
+            : "https://mbc-tau.vercel.app");
         const referrerParam = user?.fid ? `?ref=${user.fid}` : "";
         const shareUrl = `${fallbackAppUrl}/dish/${encodeURIComponent(
           dishId
@@ -898,6 +915,43 @@ export default function DishPageClient() {
     resetApprove();
     resetMint();
     setTriggerMint(false);
+
+    // Verify location first
+    if (
+      !locationVerified &&
+      dish?.restaurantLatitude &&
+      dish?.restaurantLongitude
+    ) {
+      setMintStep("verifying_location");
+      try {
+        const position = await getCurrentPosition();
+        const result = isWithinRange(
+          position.coords.latitude,
+          position.coords.longitude,
+          dish.restaurantLatitude,
+          dish.restaurantLongitude,
+          200 // 200 meters radius
+        );
+        setLocationDistance(result.distance);
+
+        if (!result.isValid) {
+          setMintError(
+            `You must be at the restaurant to mint. You are ${result.distance}m away (max 200m).`
+          );
+          setMintStep("idle");
+          return;
+        }
+        setLocationVerified(true);
+      } catch (err) {
+        console.error("Location error:", err);
+        setMintError(
+          "Could not verify your location. Please enable location services."
+        );
+        setMintStep("idle");
+        return;
+      }
+    }
+
     setMintStep("checking");
 
     addDebug(`DishId: ${dishId.slice(0, 10)}...`);
@@ -1443,12 +1497,44 @@ export default function DishPageClient() {
               </div>
             )}
 
+            {/* Location Verified Success */}
+            {locationVerified && locationDistance !== null && (
+              <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <svg
+                    className="w-4 h-4 text-emerald-500"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                  <p className="text-sm text-emerald-700">
+                    Location verified ({locationDistance}m from restaurant)
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Minting Progress */}
             {isMinting && (
               <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 mb-4">
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
                   <p className="text-sm text-indigo-700">
+                    {mintStep === "verifying_location" &&
+                      "Verifying your location..."}
                     {mintStep === "checking" && "Preparing transaction..."}
                     {mintStep === "approving" && "Approving USDC..."}
                     {mintStep === "minting" && "Minting tokens..."}
@@ -1470,6 +1556,32 @@ export default function DishPageClient() {
             <p className="text-center text-xs text-slate-500 mt-2">
               Max $10 per dish
             </p>
+            {dish?.restaurantLatitude &&
+              dish?.restaurantLongitude &&
+              !locationVerified && (
+                <p className="text-center text-xs text-slate-400 mt-1 flex items-center justify-center gap-1">
+                  <svg
+                    className="w-3 h-3"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                  Location verification required
+                </p>
+              )}
           </div>
 
           {/* Share Referral */}
