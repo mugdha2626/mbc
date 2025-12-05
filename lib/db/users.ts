@@ -98,3 +98,57 @@ export async function getUserPortfolio(fid: number): Promise<Portfolio | null> {
   const user = await findUserByFid(fid);
   return user?.portfolio || null;
 }
+
+/**
+ * Add item to user's wishlist
+ */
+export async function addToWishlist(
+  fid: number,
+  dishId: string,
+  referrer: number
+): Promise<void> {
+  const db = await getDb();
+
+  // Check if already in wishlist to avoid duplicates
+  const user = await findUserByFid(fid);
+  const exists = user?.wishList?.some((item) => item.dish === dishId);
+
+  if (!exists) {
+    await db.collection<User>(COLLECTION).updateOne(
+      { fid },
+      {
+        $push: {
+          wishList: { dish: dishId, referrer },
+        },
+      }
+    );
+  }
+}
+
+/**
+ * Remove item from user's wishlist
+ */
+export async function removeFromWishlist(
+  fid: number,
+  dishId: string
+): Promise<void> {
+  const db = await getDb();
+  await db.collection<User>(COLLECTION).updateOne(
+    { fid },
+    {
+      $pull: {
+        wishList: { dish: dishId },
+      },
+    }
+  );
+}
+
+/**
+ * Get user's wishlist
+ */
+export async function getWishlist(
+  fid: number
+): Promise<{ dish: string; referrer: number }[]> {
+  const user = await findUserByFid(fid);
+  return user?.wishList || [];
+}

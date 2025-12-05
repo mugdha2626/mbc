@@ -18,11 +18,11 @@ import { baseSepolia } from "viem/chains";
 import {
   TMAP_DISHES_ADDRESS,
   USDC_ADDRESS,
-  TMAP_DISHES_ABI,
   ERC20_ABI,
+  TMAP_DISHES_ABI,
 } from "@/lib/contracts";
 
-// ABIs for encoding
+// ABIs
 const erc20Abi = parseAbi([
   "function approve(address spender, uint256 amount) returns (bool)",
   "function allowance(address owner, address spender) view returns (uint256)",
@@ -41,11 +41,7 @@ const tmapDishesAbi = parseAbi([
   "error TransferFailed()",
 ]);
 
-// Public client for reading
-const publicClient = createPublicClient({
-  chain: baseSepolia,
-  transport: http(),
-});
+type MintStep = "idle" | "approving" | "minting" | "complete";
 
 // Convert string dishId to bytes32 for contract calls
 // If already a hex string (hashed), use it directly; otherwise convert
@@ -65,21 +61,23 @@ const stringToBytes32 = (str: string): Hash => {
 interface DishData {
   dishId: string;
   name: string;
-  description?: string;
   image?: string;
-  currentPrice: number;
-  currentSupply: number;
-  totalHolders: number;
-  dailyVolume: number;
-  marketCap: number;
-  dailyPriceChange: number;
-  creator: number;
+  description?: string;
   restaurant: string;
-  restaurantName: string;
-  restaurantAddress: string;
-  restaurantImage: string;
-  creatorUsername: string;
-  creatorPfp: string;
+  restaurantName?: string;
+  restaurantAddress?: string;
+  restaurantImage?: string;
+  creator: number;
+  creatorUsername?: string;
+  creatorPfp?: string;
+  currentPrice?: number;
+  marketCap?: number;
+  dailyVolume?: number;
+  totalHolders?: number;
+  currentSupply?: number;
+  weeklyChange?: number;
+  yourHolding?: number;
+  yourValue?: number;
 }
 
 type MintStep = "idle" | "checking" | "approving" | "minting" | "complete";
@@ -88,13 +86,13 @@ export default function DishPage() {
   const router = useRouter();
   const params = useParams();
   const dishId = params.id as string;
+  const { user } = useFarcaster();
+  const { referrerFid } = useReferral();
 
   const [dish, setDish] = useState<DishData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  // Minting state
+  const [isLoading, setIsLoading] = useState(true);
   const [backAmount, setBackAmount] = useState(1);
+  const [isWishlisted, setIsWishlisted] = useState(false);
   const [mintStep, setMintStep] = useState<MintStep>("idle");
   const [mintError, setMintError] = useState("");
   const [triggerMint, setTriggerMint] = useState(false);
@@ -105,10 +103,6 @@ export default function DishPage() {
     setDebugInfo((prev) => [...prev, msg]);
     console.log("[Debug]", msg);
   };
-
-  // On-chain data
-  const [onChainPrice, setOnChainPrice] = useState<number | null>(null);
-  const [userBalance, setUserBalance] = useState<number>(0);
 
   // Wagmi hooks
   const { address, isConnected } = useAccount();
@@ -150,37 +144,35 @@ export default function DishPage() {
     },
   });
 
-  // Fetch dish data from API
+  // Fetch dish data
   useEffect(() => {
-    if (!dishId) return;
-
     const fetchDish = async () => {
+      if (!dishId) return;
+
       try {
-        setLoading(true);
         const res = await fetch(`/api/dish/${dishId}`);
-        const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(data.error || "Failed to fetch dish");
+        if (res.ok) {
+          const data = await res.json();
+          setDish(data.dish);
+        } else {
+          setMintError("Dish not found");
         }
-
-        setDish(data.dish);
-      } catch (err) {
-        console.error("Error fetching dish:", err);
-        setError(err instanceof Error ? err.message : "Failed to load dish");
+      } catch (error) {
+        console.error("Failed to fetch dish:", error);
+        setMintError("Failed to load dish");
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
 
     fetchDish();
   }, [dishId]);
 
-  // Fetch on-chain price
+  // Check wishlist status
   useEffect(() => {
-    if (!dishId || !TMAP_DISHES_ADDRESS) return;
+    const checkWishlist = async () => {
+      if (!user || !dishId) return;
 
-    const fetchOnChainData = async () => {
       try {
         // Convert string dishId to bytes32 for contract call
         const dishIdBytes32 = stringToBytes32(dishId);
@@ -517,13 +509,13 @@ export default function DishPage() {
 
   // Handle mint - using separate calls like create page
   const handleMint = async () => {
-    if (!isConnected || !address) {
+    if (!isConnected || !address || !dishId) {
       setMintError("Please connect your wallet");
       return;
     }
 
-    if (!TMAP_DISHES_ADDRESS || !USDC_ADDRESS) {
-      setMintError("Contract addresses not configured");
+    if (backAmount < 1) {
+      setMintError("Amount must be at least 1");
       return;
     }
 
@@ -595,6 +587,7 @@ export default function DishPage() {
 
       const needsApproval = currentAllowance < calculatedMintAmount;
 
+      // Add approve call if needed
       if (needsApproval) {
         // Start with approve, mint will be triggered via useEffect
         addDebug("Needs approval, starting approve...");
@@ -627,8 +620,6 @@ export default function DishPage() {
     }
   };
 
-  const isMinting = mintStep !== "idle" && mintStep !== "complete";
-
   const getButtonText = () => {
     switch (mintStep) {
       case "checking":
@@ -644,24 +635,37 @@ export default function DishPage() {
     }
   };
 
-  if (loading) {
+  const userBalance = usdcBalance ? Number(usdcBalance) / 1_000_000 : 0;
+  const price = currentPrice
+    ? Number(currentPrice) / 1_000_000
+    : dish?.currentPrice || 0;
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+        <div className="text-center">
+          <div className="text-xl font-semibold text-gray-900">
+            Loading dish...
+          </div>
+        </div>
       </div>
     );
   }
 
-  if (error || !dish) {
+  if (!dish) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <p className="text-gray-600 mb-4">{error || "Dish not found"}</p>
-        <button
-          onClick={() => router.back()}
-          className="btn-primary px-6 py-2 rounded-xl"
-        >
-          Go Back
-        </button>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-xl font-semibold text-gray-900">
+            Dish not found
+          </div>
+          <button
+            onClick={() => router.back()}
+            className="mt-4 px-4 py-2 bg-primary text-white rounded-xl"
+          >
+            Go Back
+          </button>
+        </div>
       </div>
     );
   }
@@ -678,7 +682,7 @@ export default function DishPage() {
           alt={dish.name}
           className="w-full h-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+        <div className="absolute inset-0 bg-linear-to-t from-black/70 via-black/20 to-transparent" />
 
         {/* Back button */}
         <button
@@ -718,14 +722,14 @@ export default function DishPage() {
         </button>
 
         {/* Dish name overlay */}
-        <div className="absolute bottom-4 left-4 right-4">
+        <div className="absolute bottom-8 left-4 right-4">
           <h1 className="text-2xl font-bold text-white">{dish.name}</h1>
         </div>
       </div>
 
       {/* Content */}
       <div className="bg-white rounded-t-3xl -mt-4 relative">
-        <div className="px-4 py-6">
+        <div className="px-4 py-4">
           {/* Restaurant & Creator Info */}
           <div className="flex items-center justify-between mb-4">
             <div
@@ -733,8 +737,11 @@ export default function DishPage() {
               onClick={() => router.push(`/restaurant/${dish.restaurant}`)}
             >
               <img
-                src={dish.restaurantImage || "https://via.placeholder.com/40"}
-                alt={dish.restaurantName}
+                src={
+                  dish.restaurantImage ||
+                  "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=100"
+                }
+                alt={dish.restaurantName || "Restaurant"}
                 className="w-10 h-10 rounded-full object-cover"
               />
               <div>
@@ -838,6 +845,28 @@ export default function DishPage() {
             </div>
           </div>
 
+          {/* Your Holdings */}
+          {dish.yourHolding && dish.yourHolding > 0 && (
+            <div className="bg-primary-softer border border-primary rounded-2xl p-4 mb-6">
+              <h3 className="font-semibold text-gray-900 mb-2">
+                Your Holdings
+              </h3>
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm text-gray-500">
+                    {dish.yourHolding} tokens
+                  </p>
+                  <p className="text-lg font-bold text-primary-dark">
+                    ${(dish.yourValue || 0).toFixed(2)}
+                  </p>
+                </div>
+                <button className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50">
+                  Cash Out
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Back More Section */}
           <div className="bg-white border border-gray-200 rounded-2xl p-4 mb-6">
             <h3 className="font-semibold text-gray-900 mb-4">Back this dish</h3>
@@ -860,7 +889,7 @@ export default function DishPage() {
               </button>
               <div className="flex-1 text-center">
                 <p className="text-3xl font-bold text-gray-900">{backAmount}</p>
-                <p className="text-sm text-gray-500">tokens</p>
+                <p className="text-sm text-gray-500">Stamps</p>
               </div>
               <button
                 onClick={() => setBackAmount(backAmount + 1)}
@@ -929,7 +958,7 @@ export default function DishPage() {
                 d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
               />
             </svg>
-            Share referral & earn 5%
+            Share referral & earn 2.5%
           </button>
         </div>
       </div>

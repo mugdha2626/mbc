@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 
+import { useFarcaster } from "@/app/providers/FarcasterProvider";
+
 export interface BackedDishCardProps {
   id: string;
   name: string;
@@ -25,15 +27,40 @@ export function BackedDishCard({
   holders,
   marketCap,
 }: BackedDishCardProps) {
+  const { user } = useFarcaster();
   const isPositive = priceChange !== undefined && priceChange >= 0;
+
+  const handleAddToWishlist = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!user) {
+      alert("Please sign in to add to wishlist");
+      return;
+    }
+
+    try {
+      await fetch("/api/wishlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fid: user.fid,
+          dishId: id,
+        }),
+      });
+      alert("Added to wishlist!");
+    } catch (error) {
+      console.error("Failed to add to wishlist", error);
+    }
+  };
 
   return (
     <Link href={`/dish/${id}`}>
-      <div className="bg-white border border-gray-100 rounded-2xl p-3 hover:shadow-md transition-shadow mb-2">
+      <div className="bg-white border border-gray-100 rounded-2xl p-3 hover:shadow-md transition-shadow mb-2 relative group">
         <div className="flex gap-3">
           {/* Image */}
           <img
-            src={image}
+            src={image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400"}
             alt={name}
             className="w-20 h-20 rounded-xl object-cover shrink-0"
           />
@@ -41,7 +68,17 @@ export function BackedDishCard({
           {/* Info */}
           <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
             <div>
-              <h3 className="font-semibold text-gray-900 leading-tight mb-1 line-clamp-2">{name}</h3>
+              <div className="flex justify-between items-start">
+                <h3 className="font-semibold text-gray-900 leading-tight mb-1 line-clamp-2">{name}</h3>
+                <button
+                  onClick={handleAddToWishlist}
+                  className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors opacity-0 group-hover:opacity-100"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                  </svg>
+                </button>
+              </div>
 
               {restaurant && (
                 <div className="flex items-center gap-1 text-xs text-gray-500 mb-0.5">

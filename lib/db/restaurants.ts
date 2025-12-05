@@ -3,6 +3,7 @@ import type { Restaurant, Dish, RestaurantId } from "@/app/interface";
 
 const RESTAURANTS_COLLECTION = "restaurants";
 const DISHES_COLLECTION = "dishes";
+const USERS_COLLECTION = "users";
 
 /**
  * Calculate the tmapRating for a restaurant based on the average currentPrice of its dishes.
@@ -152,4 +153,122 @@ export async function getRestaurantWithStats(restaurantId: RestaurantId) {
       totalVolume,
     }
   };
+}
+
+/**
+ * Delete a restaurant and cascade delete all associated data:
+ * - Delete all dishes belonging to the restaurant
+ * - Remove wishlist references to those dishes from all users
+ * - Remove portfolio references to those dishes from all users
+ * - Delete the restaurant itself
+ *
+ * @returns Object with counts of deleted items
+ */
+export async function deleteRestaurantWithCascade(restaurantId: RestaurantId): Promise<{
+  deletedRestaurant: boolean;
+  deletedDishes: number;
+  cleanedWishlists: number;
+  cleanedPortfolios: number;
+}> {
+  const db = await getDb();
+
+  // 1. Get all dish IDs for this restaurant
+  const dishes = await db
+    .collection<Dish>(DISHES_COLLECTION)
+    .find({ restaurant: restaurantId })
+    .project({ dishId: 1 })
+    .toArray();
+
+  const dishIds = dishes.map(d => d.dishId);
+
+  let cleanedWishlists = 0;
+  let cleanedPortfolios = 0;
+
+  if (dishIds.length > 0) {
+    // 2. Remove these dishes from all users' wishlists
+    const wishlistResult = await db.collection(USERS_COLLECTION).updateMany(
+      { "wishList.dish": { $in: dishIds } },
+      {
+        $pull: {
+          wishList: { dish: { $in: dishIds } }
+        }
+      } as any // eslint-disable-line @typescript-eslint/no-explicit-any
+    );
+    cleanedWishlists = wishlistResult.modifiedCount;
+
+    // 3. Remove these dishes from all users' portfolios
+    const portfolioResult = await db.collection(USERS_COLLECTION).updateMany(
+      { "portfolio.dishes.dish": { $in: dishIds } },
+      {
+        $pull: {
+          "portfolio.dishes": { dish: { $in: dishIds } }
+        }
+      } as any // eslint-disable-line @typescript-eslint/no-explicit-any
+    );
+    cleanedPortfolios = portfolioResult.modifiedCount;
+
+    // 4. Delete all dishes for this restaurant
+    await db.collection(DISHES_COLLECTION).deleteMany({ restaurant: restaurantId });
+  }
+
+  // 5. Delete the restaurant itself
+  const restaurantResult = await db
+    .collection(RESTAURANTS_COLLECTION)
+    .deleteOne({ id: restaurantId });
+
+  return {
+    deletedRestaurant: restaurantResult.deletedCount > 0,
+    deletedDishes: dishIds.length,
+    cleanedWishlists,
+    cleanedPortfolios,
+  };
+}
+
+/**
+ * Clean up orphaned wishlist items for a user.
+ * Removes any wishlist items where the dish no longer exists.
+ *
+ * @returns The cleaned wishlist
+ */
+export async function cleanupOrphanedWishlistItems(fid: number): Promise<{ dish: string; referrer: number }[]> {
+  const db = await getDb();
+
+  // Get user's current wishlist
+  const user = await db.collection(USERS_COLLECTION).findOne({ fid });
+  if (!user || !user.wishList || user.wishList.length === 0) {
+    return [];
+  }
+
+  const wishlistDishIds = user.wishList.map((item: { dish: string }) => item.dish);
+
+  // Find which dishes actually exist
+  const existingDishes = await db
+    .collection(DISHES_COLLECTION)
+    .find({ dishId: { $in: wishlistDishIds } })
+    .project({ dishId: 1 })
+    .toArray();
+
+  const existingDishIds = new Set(existingDishes.map(d => d.dishId));
+
+  // Find orphaned dish IDs
+  const orphanedDishIds = wishlistDishIds.filter((id: string) => !existingDishIds.has(id));
+
+  if (orphanedDishIds.length > 0) {
+    // Remove orphaned items from wishlist
+    await db.collection(USERS_COLLECTION).updateOne(
+      { fid },
+      {
+        $pull: {
+          wishList: { dish: { $in: orphanedDishIds } }
+        }
+      } as any // eslint-disable-line @typescript-eslint/no-explicit-any
+    );
+  }
+
+  // Return the cleaned wishlist
+  const cleanedWishlist = user.wishList.filter(
+    (item: { dish: string }) => existingDishIds.has(item.dish)
+  );
+
+  return cleanedWishlist;
 }

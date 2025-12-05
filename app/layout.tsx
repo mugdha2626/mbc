@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "tmap - Social Map of Food Culture",
-  description: "Discover, mint, and trade food culture tokens",
+  description: "Discover, mint, and trade food culture Stamps",
 };
 
 export default function RootLayout({

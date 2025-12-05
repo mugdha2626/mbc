@@ -21,61 +21,108 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Build request body
+    // Use Places Autocomplete API for fast, predictive results
+    // Note: includedPrimaryTypes is limited to 5 types max
+    const primaryTypesForAutocomplete = [
+      "restaurant",
+      "cafe",
+      "bar",
+      "bakery",
+      "coffee_shop",
+    ];
+
     const body: Record<string, unknown> = {
-      textQuery: `${query} restaurant`,
-      includedType: "restaurant",
+      input: query,
+      includedPrimaryTypes: primaryTypesForAutocomplete,
       languageCode: "en",
-      maxResultCount: 10,
     };
 
-    // Add location bias if coordinates provided
+    // Add location bias for nearby results
     if (lat && lng) {
+      const latitude = parseFloat(lat);
+      const longitude = parseFloat(lng);
+
       body.locationBias = {
         circle: {
-          center: {
-            latitude: parseFloat(lat),
-            longitude: parseFloat(lng),
-          },
-          radius: 5000, // 5km radius
+          center: { latitude, longitude },
+          radius: 5000.0, // 5km
         },
       };
     }
 
-    const response = await fetch(
-      "https://places.googleapis.com/v1/places:searchText",
+    // Step 1: Get autocomplete predictions
+    const autocompleteResponse = await fetch(
+      "https://places.googleapis.com/v1/places:autocomplete",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": GOOGLE_API_KEY,
-          "X-Goog-FieldMask":
-            "places.id,places.displayName,places.formattedAddress,places.location",
         },
         body: JSON.stringify(body),
       }
     );
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error("Places API error:", error);
+    if (!autocompleteResponse.ok) {
+      const errorText = await autocompleteResponse.text();
+      console.error("Autocomplete API error:", autocompleteResponse.status, errorText);
       return NextResponse.json(
-        { error: "Failed to search places" },
-        { status: response.status }
+        { error: "Failed to search places", details: errorText },
+        { status: autocompleteResponse.status }
       );
     }
 
-    const data = await response.json();
+    const autocompleteData = await autocompleteResponse.json();
+    const suggestions = autocompleteData.suggestions || [];
 
-    // Transform to Restaurant format matching interface.tsx
-    const places: Restaurant[] = (data.places || []).map(
-      (place: {
-        id: string;
+    if (suggestions.length === 0) {
+      return NextResponse.json({ places: [] });
+    }
+
+    // Step 2: Fetch details for each place (in parallel for speed)
+    // Filter to only placePredictions (not queryPredictions)
+    const placePredictions = suggestions
+      .filter((s: { placePrediction?: unknown }) => s.placePrediction)
+      .slice(0, 8);
+
+    const placeDetailsPromises = placePredictions.map(
+      async (suggestion: { placePrediction: { placeId: string; structuredFormat?: { mainText?: { text: string }; secondaryText?: { text: string } } } }) => {
+        const placeId = suggestion.placePrediction?.placeId;
+        if (!placeId) return null;
+
+        try {
+          const detailsResponse = await fetch(
+            `https://places.googleapis.com/v1/places/${placeId}`,
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": GOOGLE_API_KEY!,
+                "X-Goog-FieldMask": "id,displayName,formattedAddress,location,primaryType,types",
+              },
+            }
+          );
+
+          if (!detailsResponse.ok) return null;
+          return await detailsResponse.json();
+        } catch {
+          return null;
+        }
+      }
+    );
+
+    const placeDetails = await Promise.all(placeDetailsPromises);
+
+    // Transform to Restaurant format (already filtered by includedPrimaryTypes)
+    const places: Restaurant[] = placeDetails
+      .filter(Boolean)
+      .map((place: {
+        id?: string;
         displayName?: { text: string };
         formattedAddress?: string;
         location?: { latitude: number; longitude: number };
       }): Restaurant => ({
-        id: place.id as RestaurantId,
+        id: (place.id || "") as RestaurantId,
         name: place.displayName?.text || "Unknown",
         address: place.formattedAddress || "",
         latitude: place.location?.latitude || 0,
@@ -83,8 +130,7 @@ export async function GET(request: NextRequest) {
         image: "",
         dishes: [] as Dish[],
         tmapRating: 0,
-      })
-    );
+      }));
 
     return NextResponse.json({ places });
   } catch (error) {

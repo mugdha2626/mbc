@@ -22,6 +22,7 @@ interface GoogleMapViewProps {
   selectedLocation?: { lat: number; lng: number; id: string } | null;
   userLocation?: { lat: number; lng: number } | null;
   showRecenterButton?: boolean;
+  defaultZoom?: number;
 }
 
 const DEFAULT_CENTER = { lat: 40.7549, lng: -73.9840 };
@@ -33,6 +34,7 @@ export function GoogleMapView({
   selectedLocation,
   userLocation,
   showRecenterButton = false,
+  defaultZoom = 15,
 }: GoogleMapViewProps) {
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
   // Track the initial center (set once when center prop first becomes available)
@@ -40,10 +42,12 @@ export function GoogleMapView({
   // For programmatic moves (recenter button, selecting location) - cleared after use
   const [flyToCenter, setFlyToCenter] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Set initial center once when center prop becomes available
+  // Set initial center once when center prop becomes available, and fly to it
   useEffect(() => {
     if (center && !initialCenter) {
       setInitialCenter(center);
+      // Fly to the center when it first becomes available (e.g., user location loaded)
+      setFlyToCenter(center);
     }
   }, [center, initialCenter]);
 
@@ -93,7 +97,7 @@ export function GoogleMapView({
       <Map
         defaultCenter={mapCenter}
         center={flyToCenter || undefined}
-        defaultZoom={15}
+        defaultZoom={defaultZoom}
         mapId="tmap-main"
         className="w-full h-full"
         disableDefaultUI
@@ -118,7 +122,7 @@ export function GoogleMapView({
             <div className={`relative cursor-pointer transform transition-transform hover:scale-110 ${selectedRestaurant?.id === restaurant.id ? "scale-110" : ""}`}>
               <div className="w-12 h-12 rounded-full overflow-hidden border-3 border-white shadow-lg">
                 <img
-                  src={restaurant.image}
+                  src={restaurant.image || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400"}
                   alt={restaurant.name}
                   className="w-full h-full object-cover"
                 />
@@ -137,7 +141,7 @@ export function GoogleMapView({
       {showRecenterButton && userLocation && (
         <button
           onClick={handleRecenter}
-          className="absolute bottom-20 left-4 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-20"
+          className="absolute bottom-3 left-3 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-20"
           aria-label="Center on my location"
           title="Center on my location"
         >
@@ -154,7 +158,7 @@ export function GoogleMapView({
             <div className="flex gap-3">
               <div className="relative">
                 <img
-                  src={selectedRestaurant.image}
+                  src={selectedRestaurant.image || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400"}
                   alt={selectedRestaurant.name}
                   className="w-16 h-16 rounded-xl object-cover"
                 />
@@ -249,7 +253,7 @@ function PlaceholderMap({
             <div className={`relative ${selectedRestaurant?.id === restaurant.id ? "scale-110" : ""}`}>
               <div className="w-14 h-14 rounded-full overflow-hidden border-3 border-white shadow-lg">
                 <img
-                  src={restaurant.image}
+                  src={restaurant.image || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400"}
                   alt={restaurant.name}
                   className="w-full h-full object-cover"
                 />
@@ -280,7 +284,7 @@ function PlaceholderMap({
       {/* Recenter button */}
       {showRecenterButton && userLocation && (
         <button
-          className="absolute bottom-20 left-4 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-20"
+          className="absolute bottom-3 left-3 w-10 h-10 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-20"
           aria-label="Center on my location"
           title="Center on my location"
         >
@@ -304,7 +308,7 @@ function PlaceholderMap({
             <div className="flex gap-3">
               <div className="relative">
                 <img
-                  src={selectedRestaurant.image}
+                  src={selectedRestaurant.image || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400"}
                   alt={selectedRestaurant.name}
                   className="w-16 h-16 rounded-xl object-cover"
                 />

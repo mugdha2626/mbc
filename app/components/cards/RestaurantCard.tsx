@@ -28,7 +28,7 @@ export function RestaurantCard({
         {/* Image */}
         <div className="relative h-32">
           <img
-            src={image}
+            src={image || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400"}
             alt={name}
             className="w-full h-full object-cover"
           />

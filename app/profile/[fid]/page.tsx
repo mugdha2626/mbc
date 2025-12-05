@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { BottomNav } from "@/app/components/layout/BottomNav";
+import { useFarcaster } from "@/app/providers/FarcasterProvider";
 
 interface UserData {
   fid: number;
@@ -47,6 +48,7 @@ export default function UserProfilePage() {
   const params = useParams();
   const router = useRouter();
   const fid = params.fid as string;
+  const { user: currentUser } = useFarcaster();
 
   const [user, setUser] = useState<UserData | null>(null);
   const [createdDishes, setCreatedDishes] = useState<CreatedDish[]>([]);
@@ -81,6 +83,31 @@ export default function UserProfilePage() {
 
     if (fid) fetchData();
   }, [fid]);
+
+  const handleAddToWishlist = async (e: React.MouseEvent, dishId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!currentUser) {
+      alert("Please sign in to add to wishlist");
+      return;
+    }
+
+    try {
+      await fetch("/api/wishlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fid: currentUser.fid,
+          dishId,
+          referrer: parseInt(fid), // The profile owner is the referrer
+        }),
+      });
+      alert("Added to wishlist!");
+    } catch (error) {
+      console.error("Failed to add to wishlist", error);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -181,14 +208,24 @@ export default function UserProfilePage() {
           <div className="space-y-3">
             {createdDishes.map((dish) => (
               <Link key={dish.tokenAdrress} href={`/dish/${dish.tokenAdrress}`}>
-                <div className="bg-white rounded-2xl p-4 border border-gray-100 flex items-center gap-3">
-                  <img src={dish.image} alt={dish.name} className="w-14 h-14 rounded-xl object-cover" />
+                <div className="bg-white rounded-2xl p-4 border border-gray-100 flex items-center gap-3 relative group">
+                  <img src={dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400"} alt={dish.name} className="w-14 h-14 rounded-xl object-cover" />
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">{dish.name}</p>
                     <p className="text-sm text-gray-500">{dish.totalHolders} holders</p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right flex flex-col items-end gap-2">
                     <p className="font-semibold text-gray-900">${dish.currentPrice.toFixed(2)}</p>
+                    {currentUser?.fid !== parseInt(fid) && (
+                      <button
+                        onClick={(e) => handleAddToWishlist(e, dish.tokenAdrress)}
+                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                        </svg>
+                      </button>
+                    )}
                   </div>
                 </div>
               </Link>
@@ -207,14 +244,26 @@ export default function UserProfilePage() {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Holdings</h3>
           <div className="space-y-3">
             {user.portfolio.dishes.map((holding, i) => (
-              <div key={i} className="bg-white rounded-2xl p-4 border border-gray-100 flex justify-between">
+              <div key={i} className="bg-white rounded-2xl p-4 border border-gray-100 flex justify-between items-center">
                 <div>
-                  <p className="font-medium text-gray-900">Dish Token</p>
-                  <p className="text-sm text-gray-500">{holding.quantity} tokens</p>
+                  <p className="font-medium text-gray-900">Dish Stamp</p>
+                  <p className="text-sm text-gray-500">{holding.quantity} Stamps</p>
                 </div>
-                <p className={`font-medium ${holding.return >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {holding.return >= 0 ? '+' : ''}{formatCurrency(holding.return)}
-                </p>
+                <div className="flex items-center gap-3">
+                  <p className={`font-medium ${holding.return >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {holding.return >= 0 ? '+' : ''}{formatCurrency(holding.return)}
+                  </p>
+                  {currentUser?.fid !== parseInt(fid) && (
+                    <button
+                      onClick={(e) => handleAddToWishlist(e, holding.dish)}
+                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
