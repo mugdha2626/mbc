@@ -14,6 +14,7 @@
     "@farcaster/miniapp-sdk": "^0.2.1",
     "@farcaster/miniapp-wagmi-connector": "^1.1.0",
     "@tanstack/react-query": "^5.90.11",
+    "@vercel/og": "^0.8.5",
     "@vis.gl/react-google-maps": "^1.7.1",
     "ethers": "^6.16.0",
     "mongodb": "^7.0.0",

@@ -1298,7 +1298,8 @@ export default function CreatePage() {
       {/* Progress Steps */}
       <div className="glass-strong px-4 py-4 border-b border-card-border">
         <div className="flex items-center justify-between relative">
-          <div className="absolute top-4 left-4 right-4 h-1 flex">
+          {/* Connecting lines */}
+          <div className="absolute top-4 left-4 right-4 h-1 flex z-0">
             {[1, 2, 3].map((s) => (
               <div
                 key={s}
@@ -1308,15 +1309,16 @@ export default function CreatePage() {
               />
             ))}
           </div>
+          {/* Step circles */}
           {[1, 2, 3, 4].map((s) => (
             <div
               key={s}
               className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium z-10 ${
-                s < step
-                  ? "bg-primary-dark text-white"
-                  : s === step
-                  ? "bg-primary-dark text-white"
-                  : "bg-white/80 text-primary-text"
+                s === step
+                  ? "bg-primary-dark text-white border-2 border-primary-dark"
+                  : s < step
+                  ? "bg-primary-dark text-white border-2 border-primary-dark"
+                  : "bg-transparent text-primary-dark border-2 border-primary-dark"
               }`}
             >
               {s < step ? (

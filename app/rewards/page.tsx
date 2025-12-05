@@ -237,79 +237,6 @@ export default function RewardsPage() {
     }
   }, [claimCallError, claimStep]);
 
-  // Claim rewards for a specific dish
-  const handleClaim = async (dishId: string) => {
-    if (!isConnected || !address) {
-      setClaimError("Please connect your wallet");
-      return;
-    }
-
-    setClaimError("");
-    setClaimSuccess(false);
-    resetClaim();
-    setClaimingDishId(dishId);
-    setClaimStep("claiming");
-
-    try {
-      const dishIdBytes32 = dishId as Hash;
-
-      sendClaimCalls({
-        calls: [
-          {
-            to: TMAP_DISHES_ADDRESS,
-            data: encodeFunctionData({
-              abi: rewardsAbi,
-              functionName: "claimRewards",
-              args: [dishIdBytes32],
-            }),
-          },
-        ],
-      });
-    } catch (err) {
-      console.error("Error claiming rewards:", err);
-      setClaimError(err instanceof Error ? err.message : "Failed to claim");
-      setClaimStep("idle");
-      setClaimingDishId(null);
-    }
-  };
-
-  const handleClaimReferral = async () => {
-    if (!isConnected || !address) {
-      setClaimError("Please connect your wallet");
-      return;
-    }
-
-    if (referralRewards <= 0) return;
-
-    setClaimError("");
-    setClaimSuccess(false);
-    resetClaim();
-    setClaimingDishId("referral");
-    setClaimStep("claiming");
-
-    try {
-      sendClaimCalls({
-        calls: [
-          {
-            to: TMAP_DISHES_ADDRESS,
-            data: encodeFunctionData({
-              abi: rewardsAbi,
-              functionName: "claimReferralRewards",
-              args: [],
-            }),
-          },
-        ],
-      });
-    } catch (err) {
-      console.error("Error claiming referral rewards:", err);
-      setClaimError(
-        err instanceof Error ? err.message : "Failed to claim referral rewards"
-      );
-      setClaimStep("idle");
-      setClaimingDishId(null);
-    }
-  };
-
   // Claim all rewards
   const handleClaimAll = async () => {
     if (!isConnected || !address) {
@@ -363,6 +290,76 @@ export default function RewardsPage() {
 
   const isClaiming = claimStep === "claiming";
 
+  // Claim rewards for a specific dish
+  const handleClaim = async (dishId: string) => {
+    if (!isConnected || !address) {
+      setClaimError("Please connect your wallet");
+      return;
+    }
+
+    setClaimError("");
+    setClaimSuccess(false);
+    resetClaim();
+    setClaimingDishId(dishId);
+    setClaimStep("claiming");
+
+    try {
+      sendClaimCalls({
+        calls: [
+          {
+            to: TMAP_DISHES_ADDRESS,
+            data: encodeFunctionData({
+              abi: rewardsAbi,
+              functionName: "claimRewards",
+              args: [dishId as Hash],
+            }),
+          },
+        ],
+      });
+    } catch (err) {
+      console.error("Error claiming rewards:", err);
+      setClaimError(err instanceof Error ? err.message : "Failed to claim");
+      setClaimStep("idle");
+      setClaimingDishId(null);
+    }
+  };
+
+  // Claim referral rewards
+  const handleClaimReferral = async () => {
+    if (!isConnected || !address) {
+      setClaimError("Please connect your wallet");
+      return;
+    }
+
+    if (referralRewards <= 0) return;
+
+    setClaimError("");
+    setClaimSuccess(false);
+    resetClaim();
+    setClaimingDishId("referral");
+    setClaimStep("claiming");
+
+    try {
+      sendClaimCalls({
+        calls: [
+          {
+            to: TMAP_DISHES_ADDRESS,
+            data: encodeFunctionData({
+              abi: rewardsAbi,
+              functionName: "claimReferralRewards",
+              args: [],
+            }),
+          },
+        ],
+      });
+    } catch (err) {
+      console.error("Error claiming referral rewards:", err);
+      setClaimError(err instanceof Error ? err.message : "Failed to claim");
+      setClaimStep("idle");
+      setClaimingDishId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-pink text-foreground pb-24">
@@ -414,93 +411,75 @@ export default function RewardsPage() {
       {/* Total Rewards Card */}
       <div className="px-4 pt-4 pb-3">
         <div className="glass rounded-2xl p-4 card-shadow">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-xs text-primary-text mb-0.5 opacity-70">
-                Total Claimable
-              </p>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-2xl font-semibold text-foreground">
-                  ${totalRewards.toFixed(4)}
-                </span>
-                <span className="text-xs text-primary-text opacity-70">
-                  USDC
-                </span>
+          <div>
+            <p className="text-xs text-primary-text mb-0.5 opacity-70">
+              Total Claimable
+            </p>
+            <div className="flex items-end gap-2 mb-3">
+              <span className="text-4xl font-bold text-primary-dark">
+                ${totalRewards.toFixed(4)}
+              </span>
+              <span className="text-primary-text mb-1">USDC</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <div className="glass-soft rounded-lg p-2.5 border-card-border">
+                <p className="text-[10px] text-primary-text mb-0.5 opacity-70">
+                  Holdings
+                </p>
+                <p className="text-sm font-semibold text-foreground">
+                  ${dishRewardsTotal.toFixed(4)}
+                </p>
+                <p className="text-[9px] text-primary-text opacity-60 mt-0.5">
+                  {dishRewards.length} dish
+                  {dishRewards.length !== 1 ? "es" : ""}
+                </p>
+              </div>
+              <div className="glass-soft rounded-lg p-2.5 border-card-border">
+                <p className="text-[10px] text-primary-text mb-0.5 opacity-70">
+                  Referrals
+                </p>
+                <p className="text-sm font-semibold text-foreground">
+                  ${referralRewards.toFixed(4)}
+                </p>
+                <p className="text-[9px] text-primary-text opacity-60 mt-0.5">
+                  Wishlist shares
+                </p>
               </div>
             </div>
-            <div className="w-10 h-10 glass-primary rounded-lg flex items-center justify-center">
-              <svg
-                className="w-5 h-5 text-primary-dark"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+
+            {totalRewards > 0 && (
+              <button
+                onClick={handleClaimAll}
+                disabled={isClaiming}
+                className="w-full btn-primary font-semibold py-3.5 rounded-xl transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
+                {isClaiming && claimingDishId === "all" ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Claiming All...
+                  </>
+                ) : (
+                  <>
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                    Claim Rewards
+                  </>
+                )}
+              </button>
+            )}
           </div>
-
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <div className="glass-soft rounded-lg p-2.5 border-card-border">
-              <p className="text-[10px] text-primary-text mb-0.5 opacity-70">
-                Holdings
-              </p>
-              <p className="text-sm font-semibold text-foreground">
-                ${dishRewardsTotal.toFixed(4)}
-              </p>
-              <p className="text-[9px] text-primary-text opacity-60 mt-0.5">
-                {dishRewards.length} dish{dishRewards.length !== 1 ? "es" : ""}
-              </p>
-            </div>
-            <div className="glass-soft rounded-lg p-2.5 border-card-border">
-              <p className="text-[10px] text-primary-text mb-0.5 opacity-70">
-                Referrals
-              </p>
-              <p className="text-sm font-semibold text-foreground">
-                ${referralRewards.toFixed(4)}
-              </p>
-              <p className="text-[9px] text-primary-text opacity-60 mt-0.5">
-                Wishlist shares
-              </p>
-            </div>
-          </div>
-
-          {totalRewards > 0 && (
-            <button
-              onClick={handleClaimAll}
-              disabled={isClaiming}
-              className="w-full btn-primary py-2.5 rounded-lg transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm font-medium"
-            >
-              {isClaiming && claimingDishId === "all" ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Claiming...
-                </>
-              ) : (
-                <>
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                  Claim All
-                </>
-              )}
-            </button>
-          )}
         </div>
       </div>
 
