@@ -82,6 +82,33 @@ export const TMAP_DISHES_ABI = [
     ],
     outputs: [{ name: "", type: "uint256" }],
   },
+  {
+    name: "calculatePendingRewards",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "user", type: "address" },
+      { name: "dishId", type: "bytes32" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "claimRewards",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "dishId", type: "bytes32" }],
+    outputs: [],
+  },
+  {
+    name: "pendingRewards",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "", type: "bytes32" },
+      { name: "", type: "address" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+  },
 ] as const;
 
 // ERC20 ABI for USDC
