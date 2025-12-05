@@ -42,8 +42,8 @@ export async function POST(request: NextRequest) {
     const newSupply = Math.max(0, (dish.currentSupply || 0) - tokensSold);
 
     // Calculate new price based on supply (using bonding curve formula)
-    // Price = 0.1 + (supply * 0.0125)
-    const newPrice = 0.1 + newSupply * 0.0125;
+    // Price = 1.0 + (supply * 0.0125)
+    const newPrice = 1.0 + newSupply * 0.0125;
 
     await db.collection("dishes").updateOne(
       { dishId },

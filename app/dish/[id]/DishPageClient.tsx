@@ -361,7 +361,7 @@ export default function DishPageClient() {
           console.log("[Holdings] Found holding:", holding);
 
           if (holding && holding.quantity > 0) {
-            const price = onChainPrice || dish?.currentPrice || 0.1;
+            const price = onChainPrice || dish?.currentPrice || 1.0;
             setUserHolding({
               quantity: holding.quantity,
               value: holding.quantity * price,
@@ -484,7 +484,7 @@ export default function DishPageClient() {
       const priceText =
         onChainPrice !== null
           ? `$${onChainPrice.toFixed(2)}`
-          : `$${(dish.currentPrice || 0.1).toFixed(2)}`;
+          : `$${(dish.currentPrice || 1.0).toFixed(2)}`;
 
       const castText = `Just discovered ${dish.name} at ${
         dish.restaurantName
@@ -891,7 +891,7 @@ export default function DishPageClient() {
   }, [mintCallError, mintStep]);
 
   // Calculate estimated cost for display (actual cost is calculated dynamically in handleMint)
-  const currentPrice = onChainPrice ?? dish?.currentPrice ?? 0.1;
+  const currentPrice = onChainPrice ?? dish?.currentPrice ?? 1.0;
   const totalCost = (currentPrice * backAmount).toFixed(2);
 
   // Handle mint - using separate calls like create page

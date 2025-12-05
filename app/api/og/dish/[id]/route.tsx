@@ -27,7 +27,7 @@ async function getDishData(dishId: string) {
   return {
     name: dish.name || "Unknown Dish",
     image: dish.image,
-    currentPrice: dish.currentPrice || 0.1,
+    currentPrice: dish.currentPrice || 1.0,
     totalHolders: dish.totalHolders || 0,
     currentSupply: dish.currentSupply || 0,
     restaurantName: restaurant?.name || "Unknown Restaurant",

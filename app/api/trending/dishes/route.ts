@@ -142,24 +142,32 @@ export async function GET(request: NextRequest) {
     // Calculate trending score and filter by location if provided
     const hasLocation = lat !== 0 && lng !== 0;
 
+    // Base price from bonding curve formula
+    const BASE_PRICE = 1.0;
+
     const scoredDishes = dishes
-      // Filter out dishes still at starting price ($0.10)
-      .filter(dish => dish.currentPrice > 0.10)
+      // Filter out dishes still at or below starting price ($1.00)
+      .filter(dish => dish.currentPrice > BASE_PRICE)
       .map(dish => {
         const restaurant = restaurantMap.get(dish.restaurant);
         const distance = restaurant && hasLocation
           ? getDistance(lat, lng, restaurant.latitude, restaurant.longitude)
           : null;
 
+        // Use BASE_PRICE as the minimum starting price to avoid inflated percentages
+        // Some older dishes may have incorrect or missing startingPrice values
+        const effectiveStartingPrice = Math.max(dish.startingPrice || BASE_PRICE, BASE_PRICE);
+
+        // Calculate price change percentage from the effective starting price
+        const priceChange = ((dish.currentPrice - effectiveStartingPrice) / effectiveStartingPrice) * 100;
+
         return {
           dishId: dish.dishId,
           name: dish.name,
           image: dish.image,
           currentPrice: dish.currentPrice,
-          startingPrice: dish.startingPrice,
-          priceChange: dish.startingPrice > 0
-            ? ((dish.currentPrice - dish.startingPrice) / dish.startingPrice) * 100
-            : 0,
+          startingPrice: effectiveStartingPrice,
+          priceChange,
           totalHolders: dish.totalHolders,
           currentSupply: dish.currentSupply,
           marketCap: dish.marketCap,

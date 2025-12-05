@@ -232,9 +232,9 @@ export default function CreatePage() {
           setEstimatedCost(Number(cost) / 1e6);
         } catch {
           // Dish might not exist on-chain yet, use a rough estimate
-          // Base price is $0.10, and increases by $0.0125 per token
-          // For N tokens starting from supply 0: cost ≈ N * (0.10 + 0.0125 * (N-1) / 2)
-          const basePrice = 0.1;
+          // Base price is $1.00, and increases by $0.0125 per token
+          // For N tokens starting from supply 0: cost ≈ N * (1.00 + 0.0125 * (N-1) / 2)
+          const basePrice = 1.0;
           const slope = 0.0125;
           const estimated =
             mintTokenAmount * (basePrice + (slope * (mintTokenAmount - 1)) / 2);
