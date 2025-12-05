@@ -23,6 +23,7 @@ import {
   ERC20_ABI,
   TMAP_DISHES_ABI,
 } from "@/lib/contracts";
+import { useFarcaster } from "@/app/providers/FarcasterProvider";
 
 // ABIs
 const erc20Abi = parseAbi([
@@ -94,6 +95,7 @@ export default function DishPage() {
   const router = useRouter();
   const params = useParams();
   const dishId = params.id as string;
+  const { user } = useFarcaster();
 
   const [dish, setDish] = useState<DishData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -110,6 +112,8 @@ export default function DishPage() {
   const [lastTokensReceived, setLastTokensReceived] = useState<number | null>(
     null
   );
+  const [isWishlisted, setIsWishlisted] = useState(false);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
 
   const addDebug = (msg: string) => {
     setDebugInfo((prev) => [...prev, msg]);
@@ -233,6 +237,58 @@ export default function DishPage() {
 
     fetchBalance();
   }, [address]);
+
+  // Check if dish is in user's wishlist
+  useEffect(() => {
+    const checkWishlist = async () => {
+      if (!user?.fid || !dishId) return;
+
+      try {
+        const res = await fetch(`/api/wishlist?fid=${user.fid}`);
+        if (res.ok) {
+          const data = await res.json();
+          const isInWishlist = data.wishlist?.some(
+            (item: { dish: string }) => item.dish === dishId
+          );
+          setIsWishlisted(isInWishlist);
+        }
+      } catch (err) {
+        console.error("Error checking wishlist:", err);
+      }
+    };
+
+    checkWishlist();
+  }, [user?.fid, dishId]);
+
+  // Handle wishlist toggle
+  const handleWishlistToggle = async () => {
+    if (!user?.fid) {
+      alert("Please sign in to add to wishlist");
+      return;
+    }
+
+    setWishlistLoading(true);
+    try {
+      const method = isWishlisted ? "DELETE" : "POST";
+      const res = await fetch("/api/wishlist", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fid: user.fid,
+          dishId: dishId,
+          referrer: 0,
+        }),
+      });
+
+      if (res.ok) {
+        setIsWishlisted(!isWishlisted);
+      }
+    } catch (err) {
+      console.error("Error updating wishlist:", err);
+    } finally {
+      setWishlistLoading(false);
+    }
+  };
 
   // Helper to check if status indicates success
   const isStatusSuccess = (
@@ -772,22 +828,50 @@ export default function DishPage() {
           </svg>
         </button>
 
-        {/* Share button */}
-        <button className="absolute top-4 right-4 p-2 rounded-full bg-white/90 backdrop-blur-sm hover:bg-white transition-colors shadow-sm">
-          <svg
-            className="w-5 h-5 text-gray-700"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+        {/* Action buttons */}
+        <div className="absolute top-4 right-4 flex gap-2">
+          {/* Wishlist/Heart button */}
+          <button
+            onClick={handleWishlistToggle}
+            disabled={wishlistLoading}
+            className={`p-2 rounded-full backdrop-blur-sm transition-colors shadow-sm ${
+              isWishlisted
+                ? "bg-red-500 text-white hover:bg-red-600"
+                : "bg-white/90 hover:bg-white text-gray-700"
+            } disabled:opacity-50`}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-            />
-          </svg>
-        </button>
+            <svg
+              className="w-5 h-5"
+              fill={isWishlisted ? "currentColor" : "none"}
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+              />
+            </svg>
+          </button>
+
+          {/* Share button */}
+          <button className="p-2 rounded-full bg-white/90 backdrop-blur-sm hover:bg-white transition-colors shadow-sm">
+            <svg
+              className="w-5 h-5 text-gray-700"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+              />
+            </svg>
+          </button>
+        </div>
 
         {/* Dish name overlay */}
         <div className="absolute bottom-8 left-4 right-4">
