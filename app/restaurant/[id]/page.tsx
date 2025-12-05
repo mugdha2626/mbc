@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { BottomNav } from "@/app/components/layout/BottomNav";
 import { BackedDishCard } from "@/app/components/cards/BackedDishCard";
 
@@ -39,6 +39,25 @@ export default function RestaurantPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showRatingTooltip, setShowRatingTooltip] = useState(false);
+  const ratingTooltipRef = useRef<HTMLDivElement>(null);
+
+  // Close tooltip when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ratingTooltipRef.current && !ratingTooltipRef.current.contains(event.target as Node)) {
+        setShowRatingTooltip(false);
+      }
+    };
+
+    if (showRatingTooltip) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showRatingTooltip]);
 
   useEffect(() => {
     async function fetchRestaurant() {
@@ -139,15 +158,55 @@ export default function RestaurantPage() {
         <div className="absolute bottom-6 left-4 right-4">
           <h1 className="text-2xl font-bold text-white">{restaurant.name}</h1>
           <div className="flex items-center gap-2 mt-1">
-            <div className="group relative flex items-center gap-1 text-yellow-400 cursor-help">
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-              <span className="text-white font-medium">{restaurant.tmapRating.toFixed(1)}</span>
+            <div className="relative flex items-center gap-1 text-yellow-400" ref={ratingTooltipRef}>
+              <button
+                onClick={() => setShowRatingTooltip(!showRatingTooltip)}
+                className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                <span className="text-white font-medium">{restaurant.tmapRating.toFixed(1)}</span>
+                <svg className="w-3 h-3 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
 
-              {/* Tooltip */}
-              <div className="absolute bottom-full left-0 mb-2 px-3 py-2 bg-white text-gray-700 text-xs font-medium rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap pointer-events-none shadow-lg z-10">
-                Average dish Stamp price
-                <div className="absolute top-full left-4 border-4 border-transparent border-t-white" />
-              </div>
+              {/* Rating Tooltip */}
+              {showRatingTooltip && (
+                <div className="absolute top-full left-0 mt-2 z-20 w-64">
+                  <div className="absolute -top-2 left-4 border-8 border-transparent border-b-white" />
+                  <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4 text-left">
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg className="w-4 h-4 text-yellow-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                      <span className="font-semibold text-gray-900 text-sm">tmap Rating</span>
+                    </div>
+                    <p className="text-xs text-gray-600 mb-3">
+                      This rating reflects the popularity of dishes at this restaurant.
+                    </p>
+                    <div className="bg-gray-50 rounded-lg p-2 mb-3">
+                      <p className="text-xs font-mono text-gray-700 text-center">
+                        Rating = Avg. Price × 10
+                      </p>
+                    </div>
+                    <div className="space-y-1.5 text-xs text-gray-500">
+                      <div className="flex justify-between">
+                        <span>$0.10 avg</span>
+                        <span className="text-yellow-600 font-medium">1.0 rating</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>$2.00 avg</span>
+                        <span className="text-yellow-600 font-medium">20.0 rating</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>$10.00+ avg</span>
+                        <span className="text-yellow-600 font-medium">100.0 max</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-3 pt-2 border-t border-gray-100">
+                      Higher prices = more mints = more popular dishes
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
             <span className="text-white/60">•</span>
             <span className="text-white/80 text-sm">{restaurant.stats.totalHolders} holders</span>
@@ -160,7 +219,7 @@ export default function RestaurantPage() {
         <div className="px-4 py-6">
           {/* Address */}
           <a
-            href={`https://www.google.com/maps/place/?q=place_id:${restaurant.id}`}
+            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurant.name)}&query_place_id=${restaurant.id}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-sm text-gray-500 mb-6 hover:text-primary-dark transition-colors group"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { BottomNav } from "@/app/components/layout/BottomNav";
 import { GoogleMapView } from "@/app/components/map/GoogleMapView";
@@ -84,6 +84,8 @@ export default function ProfilePage() {
   const [wishlistCount, setWishlistCount] = useState<number>(0);
   const [holdings, setHoldings] = useState<HoldingWithDetails[]>([]);
   const [createdDishes, setCreatedDishes] = useState<CreatedDishWithReferrals[]>([]);
+  const [showReputationTooltip, setShowReputationTooltip] = useState(false);
+  const tooltipRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -295,10 +297,34 @@ export default function ProfilePage() {
   // Display name for location
   const displayLocation = selectedCity || currentLocationCity;
 
-  // Calculate return percentage
-  const returnPercentage = user?.portfolio.totalInvested
-    ? ((user.portfolio.totalReturn / user.portfolio.totalInvested) * 100).toFixed(1)
+  // Calculate portfolio value on-demand from holdings
+  const calculatedPortfolioValue = useMemo(() => {
+    return holdings.reduce((sum, holding) => sum + holding.totalValue, 0);
+  }, [holdings]);
+
+  // Calculate return percentage based on calculated value vs invested
+  const returnPercentage = user?.portfolio.totalInvested && user.portfolio.totalInvested > 0
+    ? (((calculatedPortfolioValue - user.portfolio.totalInvested) / user.portfolio.totalInvested) * 100).toFixed(1)
     : "0";
+
+  const totalReturn = calculatedPortfolioValue - (user?.portfolio.totalInvested || 0);
+
+  // Close tooltip when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tooltipRef.current && !tooltipRef.current.contains(event.target as Node)) {
+        setShowReputationTooltip(false);
+      }
+    };
+
+    if (showReputationTooltip) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showReputationTooltip]);
 
   if (isLoading) {
     return (
@@ -369,11 +395,11 @@ export default function ProfilePage() {
               PORTFOLIO VALUE
             </div>
             <p className="text-2xl font-bold text-gray-900">
-              {formatCurrency(user?.portfolio.totalValue || 0)}
+              {formatCurrency(calculatedPortfolioValue)}
             </p>
-            {user?.portfolio.totalReturn !== undefined && (
-              <p className={`text-sm flex items-center gap-1 ${user.portfolio.totalReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {user.portfolio.totalReturn >= 0 ? (
+            {holdings.length > 0 && (
+              <p className={`text-sm flex items-center gap-1 ${totalReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {totalReturn >= 0 ? (
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17l5-5 5 5" />
                   </svg>
@@ -382,16 +408,24 @@ export default function ProfilePage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 7l-5 5-5-5" />
                   </svg>
                 )}
-                {user.portfolio.totalReturn >= 0 ? '+' : ''}{returnPercentage}% return
+                {totalReturn >= 0 ? '+' : ''}{returnPercentage}% return
               </p>
             )}
           </div>
-          <div className="bg-gray-50 rounded-2xl p-4">
+          <div className="bg-gray-50 rounded-2xl p-4 relative" ref={tooltipRef}>
             <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
               </svg>
               REPUTATION
+              <button
+                onClick={() => setShowReputationTooltip(!showReputationTooltip)}
+                className="ml-auto p-0.5 rounded-full hover:bg-gray-200 transition-colors"
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
             </div>
             <p className="text-2xl font-bold text-primary-dark">
               {user?.reputationScore || 0}
@@ -399,6 +433,46 @@ export default function ProfilePage() {
             <p className="text-sm text-gray-500">
               {getReputationRank(user?.reputationScore || 0)}
             </p>
+
+            {/* Reputation Tooltip */}
+            {showReputationTooltip && (
+              <div className="absolute top-full left-0 right-0 mt-2 z-20">
+                <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4 text-left">
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-4 h-4 text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                    </svg>
+                    <span className="font-semibold text-gray-900 text-sm">Reputation Score</span>
+                  </div>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Your reputation reflects your impact on the tmap community. Earn points by:
+                  </p>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <span className="w-1.5 h-1.5 bg-primary-dark rounded-full"></span>
+                      <span>Creating popular dishes</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <span className="w-1.5 h-1.5 bg-primary-dark rounded-full"></span>
+                      <span>Referring friends to mint</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <span className="w-1.5 h-1.5 bg-primary-dark rounded-full"></span>
+                      <span>Early backing of trending dishes</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <span className="w-1.5 h-1.5 bg-primary-dark rounded-full"></span>
+                      <span>Consistent activity over time</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <p className="text-xs text-gray-500">
+                      Higher reputation unlocks badges and increases your visibility.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

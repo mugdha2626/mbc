@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongodb";
 import { createPublicClient, http, type Hash } from "viem";
 import { baseSepolia } from "viem/chains";
 import { TMAP_DISHES_ADDRESS, TMAP_DISHES_ABI } from "@/lib/contracts";
+import { removeFromWishlist } from "@/lib/db/users";
 
 // Create a public client to read from the contract
 const publicClient = createPublicClient({
@@ -167,6 +168,14 @@ export async function POST(request: NextRequest) {
         $inc: { reputationScore: 5 }, // Reward for minting
       }
     );
+
+    // Remove dish from minter's wishlist (if it was there)
+    try {
+      await removeFromWishlist(minterFid, dishId);
+    } catch (err) {
+      // Non-critical error - don't fail the whole request
+      console.error("Error removing from wishlist:", err);
+    }
 
     return NextResponse.json({
       success: true,
