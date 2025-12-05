@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { BottomNav } from "@/app/components/layout/BottomNav";
@@ -16,9 +16,24 @@ interface UserData {
     totalValue: number;
     totalReturn: number;
     totalInvested: number;
-    dishes: { dish: string; quantity: number; return: number }[];
+    dishes: { dish: string; quantity: number; return: number; referredBy?: number | null }[];
   };
   reputationScore: number;
+}
+
+interface HoldingWithDetails {
+  dishId: string;
+  name: string;
+  image?: string;
+  quantity: number;
+  currentPrice: number;
+  totalValue: number;
+  returnValue: number;
+  restaurantName?: string;
+  referredBy?: {
+    fid: number;
+    username: string;
+  } | null;
 }
 
 interface CreatedDish {
@@ -54,6 +69,7 @@ export default function UserProfilePage() {
   const { user: currentUser } = useFarcaster();
 
   const [user, setUser] = useState<UserData | null>(null);
+  const [holdings, setHoldings] = useState<HoldingWithDetails[]>([]);
   const [createdDishes, setCreatedDishes] = useState<CreatedDish[]>([]);
   const [wishlisted, setWishlisted] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
@@ -70,6 +86,54 @@ export default function UserProfilePage() {
         }
         const userData = await userRes.json();
         setUser(userData.user);
+
+        const portfolio = userData.user?.portfolio;
+
+        // Fetch holdings (stamps the user owns)
+        if (portfolio?.dishes) {
+          const holdingsPromises = portfolio.dishes.map(async (item: { dish: string; quantity: number; return: number; referredBy?: number | null }) => {
+            try {
+              const dishRes = await fetch(`/api/dish/${item.dish}`);
+              if (!dishRes.ok) return null;
+              const dishData = await dishRes.json();
+              const dish = dishData.dish;
+
+              // Fetch referrer username if exists
+              let referredByInfo = null;
+              if (item.referredBy) {
+                try {
+                  const referrerRes = await fetch(`/api/users/${item.referredBy}`);
+                  if (referrerRes.ok) {
+                    const referrerData = await referrerRes.json();
+                    referredByInfo = {
+                      fid: item.referredBy,
+                      username: referrerData.user?.username || `User #${item.referredBy}`,
+                    };
+                  }
+                } catch {
+                  referredByInfo = { fid: item.referredBy, username: `User #${item.referredBy}` };
+                }
+              }
+
+              return {
+                dishId: item.dish,
+                name: dish?.name || "Unknown Dish",
+                image: dish?.image,
+                quantity: item.quantity,
+                currentPrice: dish?.currentPrice || 0,
+                totalValue: (dish?.currentPrice || 0) * item.quantity,
+                returnValue: item.return || 0,
+                restaurantName: dish?.restaurantName,
+                referredBy: referredByInfo,
+              };
+            } catch {
+              return null;
+            }
+          });
+
+          const holdingsResults = (await Promise.all(holdingsPromises)).filter(Boolean) as HoldingWithDetails[];
+          setHoldings(holdingsResults);
+        }
 
         // Fetch dishes created by this user
         const dishesRes = await fetch(`/api/dish/created?fid=${fid}`);
@@ -145,6 +209,11 @@ export default function UserProfilePage() {
     }
   };
 
+  // Calculate portfolio value dynamically from holdings
+  const calculatedPortfolioValue = useMemo(() => {
+    return holdings.reduce((sum, holding) => sum + holding.totalValue, 0);
+  }, [holdings]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -216,7 +285,7 @@ export default function UserProfilePage() {
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-gray-50 rounded-2xl p-4">
             <p className="text-xs text-gray-500 mb-1">PORTFOLIO VALUE</p>
-            <p className="text-2xl font-bold text-gray-900">{formatCurrency(user.portfolio?.totalValue || 0)}</p>
+            <p className="text-2xl font-bold text-gray-900">{formatCurrency(calculatedPortfolioValue)}</p>
           </div>
           <div className="bg-gray-50 rounded-2xl p-4">
             <p className="text-xs text-gray-500 mb-1">REPUTATION</p>
@@ -225,14 +294,81 @@ export default function UserProfilePage() {
           </div>
         </div>
 
-        <div className="bg-gray-50 rounded-2xl p-4 mt-3">
-          <p className="text-xs text-gray-500 mb-1">DISHES CREATED</p>
-          <p className="text-xl font-bold text-gray-900">{createdDishes.length}</p>
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          <div className="bg-gray-50 rounded-2xl p-4">
+            <p className="text-xs text-gray-500 mb-1">STAMPS</p>
+            <p className="text-xl font-bold text-gray-900">{holdings.length}</p>
+          </div>
+          <div className="bg-gray-50 rounded-2xl p-4">
+            <p className="text-xs text-gray-500 mb-1">DISHES CREATED</p>
+            <p className="text-xl font-bold text-gray-900">{createdDishes.length}</p>
+          </div>
         </div>
       </div>
 
+      {/* Stamps Section */}
+      <div className="px-4 py-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Stamps</h3>
+        {holdings.length > 0 ? (
+          <div className="space-y-3">
+            {holdings.map((holding) => (
+              <Link
+                key={holding.dishId}
+                href={`/dish/${holding.dishId}`}
+                className="block bg-white rounded-2xl p-4 border border-gray-100 hover:border-gray-200 transition-colors"
+              >
+                <div className="flex gap-3">
+                  <img
+                    src={holding.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"}
+                    alt={holding.name}
+                    className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between">
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{holding.name}</p>
+                        <p className="text-sm text-gray-500">{holding.quantity} Stamps</p>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-2">
+                        <p className="font-semibold text-gray-900">${holding.totalValue.toFixed(2)}</p>
+                        <p className={`text-sm ${holding.returnValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {holding.returnValue >= 0 ? '+' : ''}{formatCurrency(holding.returnValue)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-gray-500">
+                      <span>${holding.currentPrice.toFixed(2)} each</span>
+                      {holding.restaurantName && <span>{holding.restaurantName}</span>}
+                    </div>
+                    {holding.referredBy && (
+                      <div className="mt-2">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-purple-50 text-purple-700 text-xs font-medium rounded-full">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          via @{holding.referredBy.username}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl p-8 border border-gray-100 text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            </div>
+            <p className="text-gray-500">No stamps yet</p>
+          </div>
+        )}
+      </div>
+
       {/* Created Dishes */}
-      <div className="p-4">
+      <div className="px-4 pb-4">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Dishes Created</h3>
         {createdDishes.length > 0 ? (
           <div className="space-y-3">
