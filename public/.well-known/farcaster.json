@@ -7,11 +7,16 @@
   "frame": {
     "version": "1",
     "name": "tmap",
+    "subtitle": "Social Map of Food Culture",
+    "description": "Discover, mint, and trade food culture Stamps. Back your favorite dishes, earn rewards as trends grow, and build your taste reputation.",
     "iconUrl": "https://mbc-tau.vercel.app/icon.png",
     "homeUrl": "https://mbc-tau.vercel.app",
     "imageUrl": "https://mbc-tau.vercel.app/og-image.png",
     "buttonTitle": "Open tmap",
     "splashImageUrl": "https://mbc-tau.vercel.app/splash.png",
-    "splashBackgroundColor": "#9b87c5"
+    "splashBackgroundColor": "#9b87c5",
+    "tags": ["food", "social", "nft", "rewards", "discovery"],
+    "primaryCategory": "social",
+    "heroImageUrl": "https://mbc-tau.vercel.app/og-image.png"
   }
 }
