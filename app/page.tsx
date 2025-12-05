@@ -120,7 +120,7 @@ export default function Home() {
 
         // Add restaurants
         if (data.restaurants) {
-          data.restaurants.forEach((r: any) => {
+          data.restaurants.forEach((r) => {
             results.push({
               id: r.id,
               name: r.name,
@@ -134,7 +134,7 @@ export default function Home() {
 
         // Add dishes
         if (data.dishes) {
-          data.dishes.forEach((d: any) => {
+          data.dishes.forEach((d) => {
             results.push({
               id: d.dishId,
               name: d.name || d.dishId,
@@ -148,7 +148,7 @@ export default function Home() {
 
         // Add users
         if (data.users) {
-          data.users.forEach((u: any) => {
+          data.users.forEach((u) => {
             results.push({
               id: u._id,
               name: u.username,

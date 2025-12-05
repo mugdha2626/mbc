@@ -2,7 +2,13 @@
 
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
-import { useAccount, useSendCalls, useCallsStatus } from "wagmi";
+import {
+  useAccount,
+  useSendCalls,
+  useCallsStatus,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
 import getFid from "@/app/providers/Fid";
 import { Fid } from "@/app/interface";
 import {
@@ -121,8 +127,19 @@ export default function DishPageClient() {
   );
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
-  const [referrerWallet, setReferrerWallet] = useState<`0x${string}` | null>(null);
+  const [referrerWallet, setReferrerWallet] = useState<`0x${string}` | null>(
+    null
+  );
   const [isSharing, setIsSharing] = useState(false);
+
+  // Sell modal state
+  const [sellModalOpen, setSellModalOpen] = useState(false);
+  const [sellAmount, setSellAmount] = useState(1);
+  const [sellValue, setSellValue] = useState<number | null>(null);
+  const [sellStep, setSellStep] = useState<"idle" | "selling" | "complete">(
+    "idle"
+  );
+  const [sellError, setSellError] = useState("");
 
   // Wagmi hooks
   const { address, isConnected } = useAccount();
@@ -164,6 +181,20 @@ export default function DishPageClient() {
     },
   });
 
+  // Sell hooks - using useWriteContract for better compatibility
+  const {
+    writeContract: writeSellContract,
+    data: sellTxHash,
+    error: sellCallError,
+    reset: resetSell,
+    isPending: isSellPending,
+  } = useWriteContract();
+
+  const { data: sellReceipt, isLoading: isSellConfirming } =
+    useWaitForTransactionReceipt({
+      hash: sellTxHash,
+    });
+
   // Get user's FID
   useEffect(() => {
     getFid().then((fid) => setUserFid(fid));
@@ -203,11 +234,15 @@ export default function DishPageClient() {
 
     const fetchHolders = async () => {
       try {
-        const res = await fetch(`/api/dish/${encodeURIComponent(dishId)}/holders`);
+        const res = await fetch(
+          `/api/dish/${encodeURIComponent(dishId)}/holders`
+        );
         if (!res.ok) return;
         const data = await res.json();
         const holderCount = Number(data.holderCount || 0);
-        setDish((prev) => (prev ? { ...prev, totalHolders: holderCount } : prev));
+        setDish((prev) =>
+          prev ? { ...prev, totalHolders: holderCount } : prev
+        );
       } catch (err) {
         console.error("Error fetching holder count:", err);
       }
@@ -260,6 +295,90 @@ export default function DishPageClient() {
   useEffect(() => {
     fetchUsdcBalance();
   }, [address]);
+
+  // Fetch user's token holdings for this dish from database
+  // Using loading as trigger to run after dish is loaded
+  useEffect(() => {
+    console.log(
+      "[Holdings Effect] userFid:",
+      userFid,
+      "dishId:",
+      dishId,
+      "loading:",
+      loading
+    );
+
+    const fetchUserHoldings = async () => {
+      if (!userFid || !dishId || loading) {
+        console.log(
+          "[Holdings] Skipping - userFid:",
+          !!userFid,
+          "dishId:",
+          !!dishId,
+          "loading:",
+          loading
+        );
+        return;
+      }
+
+      console.log("[Holdings] Fetching holdings for user:", userFid);
+
+      try {
+        // Fetch user data from database
+        const res = await fetch(`/api/users/${userFid}`);
+        if (!res.ok) {
+          console.log("[Holdings] API returned not ok:", res.status);
+          return;
+        }
+
+        const data = await res.json();
+        const portfolio = data.user?.portfolio;
+
+        console.log("[Holdings] Portfolio dishes:", portfolio?.dishes);
+        console.log("[Holdings] Looking for dishId:", dishId);
+
+        if (portfolio?.dishes) {
+          // Find this dish in the user's portfolio
+          const dishHolding = portfolio.dishes.find(
+            (d: { dish: string; quantity: number }) => d.dish === dishId
+          );
+
+          console.log("[Holdings] Found holding:", dishHolding);
+
+          if (dishHolding && dishHolding.quantity > 0) {
+            // Get current price for value calculation - use onChainPrice or fallback
+            const currentPrice = onChainPrice || 0.1;
+            const totalValue = dishHolding.quantity * currentPrice;
+
+            console.log(
+              "[Holdings] Setting yourHolding:",
+              dishHolding.quantity,
+              "yourValue:",
+              totalValue
+            );
+
+            setDish((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    yourHolding: dishHolding.quantity,
+                    yourValue: totalValue,
+                  }
+                : prev
+            );
+          } else {
+            console.log("[Holdings] No holding found or quantity is 0");
+          }
+        } else {
+          console.log("[Holdings] No portfolio.dishes found");
+        }
+      } catch (err) {
+        console.error("Error fetching user holdings:", err);
+      }
+    };
+
+    fetchUserHoldings();
+  }, [userFid, dishId, loading, onChainPrice]);
 
   // Check if dish is in user's wishlist
   useEffect(() => {
@@ -342,20 +461,28 @@ export default function DishPageClient() {
     setIsSharing(true);
     try {
       // Get the app URL - in production this would be your deployed URL
-      const appUrl = typeof window !== "undefined"
-        ? window.location.origin
-        : "https://inez-cronish-hastately.ngrok-free.dev";
+      const appUrl =
+        typeof window !== "undefined"
+          ? window.location.origin
+          : "https://inez-cronish-hastately.ngrok-free.dev";
 
       // Build the dish URL with referral parameter
       const referrerParam = user?.fid ? `?ref=${user.fid}` : "";
-      const dishUrl = `${appUrl}/dish/${encodeURIComponent(dishId)}${referrerParam}`;
+      const dishUrl = `${appUrl}/dish/${encodeURIComponent(
+        dishId
+      )}${referrerParam}`;
 
       // Build the cast text
-      const priceText = onChainPrice !== null
-        ? `$${onChainPrice.toFixed(2)}`
-        : `$${(dish.currentPrice || 0.1).toFixed(2)}`;
+      const priceText =
+        onChainPrice !== null
+          ? `$${onChainPrice.toFixed(2)}`
+          : `$${(dish.currentPrice || 0.1).toFixed(2)}`;
 
-      const castText = `Just discovered ${dish.name} at ${dish.restaurantName}!\n\n${priceText} per stamp | ${dish.totalHolders || 0} holders\n\nMint it on tmap:`;
+      const castText = `Just discovered ${dish.name} at ${
+        dish.restaurantName
+      }!\n\n${priceText} per stamp | ${
+        dish.totalHolders || 0
+      } holders\n\nMint it on tmap:`;
 
       // Use Farcaster SDK to open cast composer
       const result = await sdk.actions.composeCast({
@@ -370,11 +497,12 @@ export default function DishPageClient() {
       console.error("Error sharing to Farcaster:", err);
       // Fallback: copy link to clipboard
       try {
-        const appUrl = typeof window !== "undefined"
-          ? window.location.origin
-          : "";
+        const appUrl =
+          typeof window !== "undefined" ? window.location.origin : "";
         const referrerParam = user?.fid ? `?ref=${user.fid}` : "";
-        const shareUrl = `${appUrl}/dish/${encodeURIComponent(dishId)}${referrerParam}`;
+        const shareUrl = `${appUrl}/dish/${encodeURIComponent(
+          dishId
+        )}${referrerParam}`;
         await navigator.clipboard.writeText(shareUrl);
         alert("Link copied to clipboard!");
       } catch (clipboardErr) {
@@ -650,7 +778,9 @@ export default function DishPageClient() {
               } else {
                 addDebug("Dish stats updated successfully!");
                 if (referrerFid) {
-                  addDebug(`Referrer (FID: ${referrerFid}) credited with referral!`);
+                  addDebug(
+                    `Referrer (FID: ${referrerFid}) credited with referral!`
+                  );
                 }
               }
             } catch (err) {
@@ -690,7 +820,12 @@ export default function DishPageClient() {
             setMintStep("complete");
 
             // Update database with mint info (including referrer for reputation)
-            if (lastMintAmount && lastTokensReceived !== null && userFid && address) {
+            if (
+              lastMintAmount &&
+              lastTokensReceived !== null &&
+              userFid &&
+              address
+            ) {
               fetch("/api/dish/mint", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -702,7 +837,9 @@ export default function DishPageClient() {
                   tokensReceived: lastTokensReceived,
                   referrerFid: referrerFid ? parseInt(referrerFid) : null,
                 }),
-              }).catch((err) => console.error("Error updating mint in DB:", err));
+              }).catch((err) =>
+                console.error("Error updating mint in DB:", err)
+              );
             }
 
             setTimeout(() => {
@@ -866,6 +1003,137 @@ export default function DishPageClient() {
       addDebug(`Error: ${err}`);
       setMintError(err instanceof Error ? err.message : "Failed to mint");
       setMintStep("idle");
+    }
+  };
+
+  // Fetch sell value when amount changes
+  const fetchSellValue = async (amount: number) => {
+    if (!amount || amount <= 0 || !dish) {
+      setSellValue(null);
+      return;
+    }
+
+    try {
+      const dishIdBytes32 = stringToBytes32(dish.dishId);
+      const value = await publicClient.readContract({
+        address: TMAP_DISHES_ADDRESS,
+        abi: TMAP_DISHES_ABI,
+        functionName: "getSellValue",
+        args: [dishIdBytes32, BigInt(amount)],
+      });
+      setSellValue(Number(value) / 1e6); // Convert from 6 decimals
+    } catch (err) {
+      console.error("Error fetching sell value:", err);
+      setSellValue(null);
+    }
+  };
+
+  // Open sell modal
+  const openSellModal = () => {
+    if (!dish || !dish.yourHolding || dish.yourHolding <= 0) return;
+    setSellAmount(1);
+    setSellValue(null);
+    setSellError("");
+    setSellStep("idle");
+    setSellModalOpen(true);
+    fetchSellValue(1);
+  };
+
+  // Close sell modal
+  const closeSellModal = () => {
+    setSellModalOpen(false);
+    setSellAmount(1);
+    setSellValue(null);
+    setSellError("");
+    setSellStep("idle");
+    resetSell();
+  };
+
+  // Update sell value when amount changes
+  useEffect(() => {
+    if (sellModalOpen && dish && sellAmount > 0) {
+      fetchSellValue(sellAmount);
+    }
+  }, [sellAmount, sellModalOpen, dish]);
+
+  // Handle sell transaction confirmation
+  useEffect(() => {
+    const updateAfterSell = async () => {
+      if (!dish || !userFid) return;
+
+      try {
+        // Call API to update portfolio in database
+        await fetch("/api/dish/sell", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dishId: dish.dishId,
+            sellerFid: userFid,
+            sellerAddress: address,
+            tokensSold: sellAmount,
+            usdcReceived: sellValue || 0,
+          }),
+        });
+      } catch (err) {
+        console.error("Error updating portfolio after sell:", err);
+      }
+
+      // Refresh page after update
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    };
+
+    if (sellReceipt && sellStep === "selling") {
+      if (sellReceipt.status === "success") {
+        setSellStep("complete");
+        updateAfterSell();
+      } else {
+        setSellError("Transaction failed. Please try again.");
+        setSellStep("idle");
+      }
+    }
+  }, [sellReceipt, sellStep, dish, userFid, address, sellAmount, sellValue]);
+
+  // Handle sell error
+  useEffect(() => {
+    if (sellCallError && sellStep === "selling") {
+      setSellError(sellCallError.message || "Sell failed");
+      setSellStep("idle");
+    }
+  }, [sellCallError, sellStep]);
+
+  // Execute sell
+  const handleSell = async () => {
+    if (!dish || !isConnected || !address) {
+      setSellError("Please connect your wallet");
+      return;
+    }
+
+    if (
+      sellAmount <= 0 ||
+      (dish.yourHolding && sellAmount > dish.yourHolding)
+    ) {
+      setSellError("Invalid amount");
+      return;
+    }
+
+    setSellError("");
+    setSellStep("selling");
+    resetSell();
+
+    try {
+      const dishIdBytes32 = stringToBytes32(dish.dishId);
+      writeSellContract({
+        address: TMAP_DISHES_ADDRESS,
+        abi: TMAP_DISHES_ABI,
+        functionName: "sell",
+        args: [dishIdBytes32, BigInt(sellAmount)],
+      });
+    } catch (err) {
+      console.error("Error selling:", err);
+      setSellError(err instanceof Error ? err.message : "Failed to sell");
+      setSellStep("idle");
     }
   };
 
@@ -1083,21 +1351,40 @@ export default function DishPageClient() {
 
           {/* Your Holdings */}
           {dish.yourHolding && dish.yourHolding > 0 && (
-            <div className="bg-primary-softer border border-primary rounded-2xl p-4 mb-6">
-              <h3 className="font-semibold text-gray-900 mb-2">
-                Your Holdings
-              </h3>
-              <div className="flex justify-between items-center">
+            <div className="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200/50 rounded-2xl p-4 mb-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                {/* <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
+                  <svg
+                    className="w-4 h-4 text-purple-600"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                    />
+                  </svg>
+                </div> */}
+                <h3 className="font-semibold text-gray-900">Your Holdings</h3>
+              </div>
+              <div className="flex justify-between items-end">
                 <div>
-                  <p className="text-sm text-gray-500">
-                    {dish.yourHolding} tokens
+                  <p className="text-xs text-purple-600/70 uppercase tracking-wide font-medium mb-1">
+                    {dish.yourHolding}{" "}
+                    {dish.yourHolding === 1 ? "stamp" : "stamps"}
                   </p>
-                  <p className="text-lg font-bold text-primary-dark">
+                  <p className="text-2xl font-bold text-gray-900">
                     ${(dish.yourValue || 0).toFixed(2)}
                   </p>
                 </div>
-                <button className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50">
-                  Cash Out
+                <button
+                  onClick={openSellModal}
+                  className="px-5 py-2.5 bg-white hover:bg-gray-50 text-gray-700 hover:text-gray-900 border border-gray-200 hover:border-gray-300 rounded-xl text-sm font-medium transition-all active:scale-95 shadow-sm"
+                >
+                  Sell
                 </button>
               </div>
             </div>
@@ -1114,7 +1401,9 @@ export default function DishPageClient() {
               <div className="mb-4 flex justify-between items-center">
                 <span className="text-sm text-slate-500">
                   Your USDC Balance:{" "}
-                  <span className="font-medium text-slate-700">${userBalance.toFixed(2)}</span>
+                  <span className="font-medium text-slate-700">
+                    ${userBalance.toFixed(2)}
+                  </span>
                 </span>
                 {address && (
                   <InlineFaucetButton
@@ -1235,6 +1524,245 @@ export default function DishPageClient() {
           </button>
         </div>
       </div>
+
+      {/* Sell Modal */}
+      {sellModalOpen && dish && dish.yourHolding && dish.yourHolding > 0 && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center"
+          onClick={closeSellModal}
+        >
+          <div
+            className="bg-white w-full max-w-lg rounded-t-3xl max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header - Sticky */}
+            <div className="sticky top-0 bg-white px-4 pt-4 pb-3 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Sell Stamps
+              </h2>
+              <button
+                onClick={closeSellModal}
+                className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"
+              >
+                <svg
+                  className="w-5 h-5 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* Dish Info */}
+              <div className="flex gap-3 p-3 bg-gray-50 rounded-xl">
+                <img
+                  src={
+                    dish.image ||
+                    "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"
+                  }
+                  alt={dish.name}
+                  className="w-14 h-14 rounded-xl object-cover"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-900 truncate">
+                    {dish.name}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {dish.yourHolding} stamps · $
+                    {dish.currentPrice?.toFixed(2) || "0.00"} each
+                  </p>
+                </div>
+              </div>
+
+              {/* Amount Selector */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Amount to sell
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setSellAmount(Math.max(1, sellAmount - 1))}
+                    disabled={
+                      sellAmount <= 1 || isSellPending || isSellConfirming
+                    }
+                    className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="text-lg text-gray-600">−</span>
+                  </button>
+                  <div className="flex-1 text-center">
+                    <p className="text-2xl font-bold text-gray-900">
+                      {sellAmount}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() =>
+                      setSellAmount(
+                        Math.min(dish.yourHolding || 1, sellAmount + 1)
+                      )
+                    }
+                    disabled={
+                      sellAmount >= (dish.yourHolding || 0) ||
+                      isSellPending ||
+                      isSellConfirming
+                    }
+                    className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="text-lg text-gray-600">+</span>
+                  </button>
+                </div>
+                {/* Quick select buttons */}
+                {dish.yourHolding > 1 && (
+                  <div className="flex gap-2 justify-center mt-2">
+                    <button
+                      onClick={() => setSellAmount(1)}
+                      className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                        sellAmount === 1
+                          ? "bg-primary-soft text-primary-dark"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      1
+                    </button>
+                    {dish.yourHolding >= 2 && (
+                      <button
+                        onClick={() =>
+                          setSellAmount(Math.floor((dish.yourHolding || 0) / 2))
+                        }
+                        className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                          sellAmount === Math.floor((dish.yourHolding || 0) / 2)
+                            ? "bg-primary-soft text-primary-dark"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }`}
+                      >
+                        Half
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setSellAmount(dish.yourHolding || 1)}
+                      className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                        sellAmount === dish.yourHolding
+                          ? "bg-primary-soft text-primary-dark"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      All
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Sell Value */}
+              <div className="bg-green-50 rounded-xl p-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-xs text-green-600 mb-0.5">
+                      You will receive
+                    </p>
+                    <p className="text-xl font-bold text-green-700">
+                      {sellValue !== null ? `$${sellValue.toFixed(2)}` : "..."}
+                      <span className="text-sm font-normal text-green-600 ml-1">
+                        USDC
+                      </span>
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                      70% return
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {sellError && (
+                <div className="bg-red-50 rounded-xl p-3">
+                  <p className="text-sm text-red-600">{sellError}</p>
+                </div>
+              )}
+
+              {/* Success Message */}
+              {sellStep === "complete" && (
+                <div className="bg-green-50 rounded-xl p-3">
+                  <div className="flex items-center gap-2">
+                    <svg
+                      className="w-4 h-4 text-green-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                    <p className="text-sm font-medium text-green-700">
+                      Sold successfully! Refreshing...
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Sell Button - Sticky bottom */}
+            <div className="sticky bottom-0 bg-white p-4 border-t border-gray-100">
+              <button
+                onClick={handleSell}
+                disabled={
+                  isSellPending ||
+                  isSellConfirming ||
+                  sellStep === "complete" ||
+                  sellValue === null
+                }
+                className="w-full py-3 btn-primary disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                {isSellPending ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Confirm in wallet...
+                  </>
+                ) : isSellConfirming ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Processing...
+                  </>
+                ) : sellStep === "complete" ? (
+                  <>
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                    Sold!
+                  </>
+                ) : (
+                  `Sell for $${sellValue?.toFixed(2) || "..."}`
+                )}
+              </button>
+              <p className="text-xs text-gray-400 text-center mt-2">
+                Selling returns 70% of market value
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

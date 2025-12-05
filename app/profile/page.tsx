@@ -9,12 +9,7 @@ import getFid from "@/app/providers/Fid";
 import type { User } from "@/app/interface";
 import { calculateUserTier } from "@/lib/tiers";
 import { useAccount, useSendCalls, useCallsStatus } from "wagmi";
-import {
-  createPublicClient,
-  http,
-  encodeFunctionData,
-  type Hash,
-} from "viem";
+import { createPublicClient, http, encodeFunctionData, type Hash } from "viem";
 import { baseSepolia } from "viem/chains";
 import { TMAP_DISHES_ADDRESS, TMAP_DISHES_ABI } from "@/lib/contracts";
 
@@ -113,11 +108,14 @@ export default function ProfilePage() {
 
   // Sell modal state
   const [sellModalOpen, setSellModalOpen] = useState(false);
-  const [selectedHolding, setSelectedHolding] = useState<HoldingWithDetails | null>(null);
+  const [selectedHolding, setSelectedHolding] =
+    useState<HoldingWithDetails | null>(null);
   const [sellAmount, setSellAmount] = useState(1);
   const [sellValue, setSellValue] = useState<number | null>(null);
   const [sellLoading, setSellLoading] = useState(false);
-  const [sellStep, setSellStep] = useState<"idle" | "selling" | "complete">("idle");
+  const [sellStep, setSellStep] = useState<"idle" | "selling" | "complete">(
+    "idle"
+  );
   const [sellError, setSellError] = useState("");
 
   // Wagmi hooks
@@ -402,9 +400,19 @@ export default function ProfilePage() {
     const dishesCreated = createdDishes.length;
     const portfolioValue = calculatedPortfolioValue;
     const reputationScore = user?.reputationScore || 0;
-    
-    return calculateUserTier(dishesBacked, dishesCreated, portfolioValue, reputationScore);
-  }, [user?.portfolio?.dishes?.length, createdDishes.length, calculatedPortfolioValue, user?.reputationScore]);
+
+    return calculateUserTier(
+      dishesBacked,
+      dishesCreated,
+      portfolioValue,
+      reputationScore
+    );
+  }, [
+    user?.portfolio?.dishes?.length,
+    createdDishes.length,
+    calculatedPortfolioValue,
+    user?.reputationScore,
+  ]);
 
   // Calculate return percentage based on calculated value vs invested
   const returnPercentage =
@@ -537,7 +545,15 @@ export default function ProfilePage() {
         setSellStep("idle");
       }
     }
-  }, [sellStatus, sellStep, selectedHolding, user?.fid, address, sellAmount, sellValue]);
+  }, [
+    sellStatus,
+    sellStep,
+    selectedHolding,
+    user?.fid,
+    address,
+    sellAmount,
+    sellValue,
+  ]);
 
   // Handle sell error
   useEffect(() => {
@@ -1098,7 +1114,10 @@ export default function ProfilePage() {
                 className="bg-white rounded-2xl p-4 border border-gray-100"
               >
                 <div className="flex gap-3">
-                  <Link href={`/dish/${holding.dishId}`} className="flex-shrink-0">
+                  <Link
+                    href={`/dish/${holding.dishId}`}
+                    className="flex-shrink-0"
+                  >
                     <img
                       src={
                         holding.image ||
@@ -1109,8 +1128,11 @@ export default function ProfilePage() {
                     />
                   </Link>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between">
-                      <Link href={`/dish/${holding.dishId}`} className="min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <Link
+                        href={`/dish/${holding.dishId}`}
+                        className="min-w-0 flex-1"
+                      >
                         <p className="font-medium text-gray-900 truncate">
                           {holding.name}
                         </p>
@@ -1160,16 +1182,6 @@ export default function ProfilePage() {
                         </span>
                       </div>
                     )}
-                    {/* Sell Button */}
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        openSellModal(holding);
-                      }}
-                      className="mt-2 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      Sell
-                    </button>
                   </div>
                 </div>
               </div>
@@ -1331,7 +1343,9 @@ export default function ProfilePage() {
           >
             {/* Modal Header - Sticky */}
             <div className="sticky top-0 bg-white px-4 pt-4 pb-3 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Sell Stamps</h2>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Sell Stamps
+              </h2>
               <button
                 onClick={closeSellModal}
                 className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"
@@ -1364,9 +1378,12 @@ export default function ProfilePage() {
                   className="w-14 h-14 rounded-xl object-cover"
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-900 truncate">{selectedHolding.name}</p>
+                  <p className="font-medium text-gray-900 truncate">
+                    {selectedHolding.name}
+                  </p>
                   <p className="text-sm text-gray-500">
-                    {selectedHolding.quantity} stamps · ${selectedHolding.currentPrice.toFixed(2)} each
+                    {selectedHolding.quantity} stamps · $
+                    {selectedHolding.currentPrice.toFixed(2)} each
                   </p>
                 </div>
               </div>
@@ -1385,13 +1402,20 @@ export default function ProfilePage() {
                     <span className="text-lg text-gray-600">−</span>
                   </button>
                   <div className="flex-1 text-center">
-                    <p className="text-2xl font-bold text-gray-900">{sellAmount}</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {sellAmount}
+                    </p>
                   </div>
                   <button
                     onClick={() =>
-                      setSellAmount(Math.min(selectedHolding.quantity, sellAmount + 1))
+                      setSellAmount(
+                        Math.min(selectedHolding.quantity, sellAmount + 1)
+                      )
                     }
-                    disabled={sellAmount >= selectedHolding.quantity || sellStep === "selling"}
+                    disabled={
+                      sellAmount >= selectedHolding.quantity ||
+                      sellStep === "selling"
+                    }
                     className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span className="text-lg text-gray-600">+</span>
@@ -1412,9 +1436,14 @@ export default function ProfilePage() {
                     </button>
                     {selectedHolding.quantity >= 2 && (
                       <button
-                        onClick={() => setSellAmount(Math.floor(selectedHolding.quantity / 2))}
+                        onClick={() =>
+                          setSellAmount(
+                            Math.floor(selectedHolding.quantity / 2)
+                          )
+                        }
                         className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
-                          sellAmount === Math.floor(selectedHolding.quantity / 2)
+                          sellAmount ===
+                          Math.floor(selectedHolding.quantity / 2)
                             ? "bg-primary-soft text-primary-dark"
                             : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                         }`}
@@ -1440,10 +1469,14 @@ export default function ProfilePage() {
               <div className="bg-green-50 rounded-xl p-3">
                 <div className="flex justify-between items-center">
                   <div>
-                    <p className="text-xs text-green-600 mb-0.5">You will receive</p>
+                    <p className="text-xs text-green-600 mb-0.5">
+                      You will receive
+                    </p>
                     <p className="text-xl font-bold text-green-700">
                       {sellValue !== null ? `$${sellValue.toFixed(2)}` : "..."}
-                      <span className="text-sm font-normal text-green-600 ml-1">USDC</span>
+                      <span className="text-sm font-normal text-green-600 ml-1">
+                        USDC
+                      </span>
                     </p>
                   </div>
                   <div className="text-right">
@@ -1490,7 +1523,11 @@ export default function ProfilePage() {
             <div className="sticky bottom-0 bg-white p-4 border-t border-gray-100">
               <button
                 onClick={handleSell}
-                disabled={sellStep === "selling" || sellStep === "complete" || sellValue === null}
+                disabled={
+                  sellStep === "selling" ||
+                  sellStep === "complete" ||
+                  sellValue === null
+                }
                 className="w-full py-3 btn-primary disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
               >
                 {sellStep === "selling" ? (
