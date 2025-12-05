@@ -47,8 +47,8 @@ All transactions are gasless for users via **Coinbase Paymaster** integrated thr
 
 ### Bonding Curve Math
 Linear bonding curve with arithmetic series pricing:
-- **Base Price**: $0.10 USDC (1,000,000 in 6 decimals)
-- **Slope**: $0.0125 per token (12,500 in 6 decimals)
+- **Base Price**: $1 USDC
+- **Slope**: $0.125 per token
 - **Price Formula**: `Price(n) = 0.1 + (n × 0.0125)` where n = current supply
 - **Mint Cost**: Uses arithmetic series sum `Cost = n/2 × (firstPrice + lastPrice)`
 - **Sell Value**: 70% of current market value (one-way curve)
