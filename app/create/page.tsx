@@ -1490,7 +1490,7 @@ export default function CreatePage() {
                     key={restaurant.id}
                     onClick={() => {
                       setSelectedRestaurant(restaurant);
-                      setStep(3);
+                      setStep(2);
                     }}
                     className={`w-full text-left bg-white border rounded-xl p-4 hover:border-blue-500 transition-colors ${
                       selectedRestaurant?.id === restaurant.id
