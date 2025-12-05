@@ -187,7 +187,7 @@ export default function WishlistPage() {
         ) : (
           <div className="space-y-3">
             {wishlistDishes.map((dish) => (
-              <Link key={dish.dishId} href={`/dish/${dish.dishId}`}>
+              <Link key={dish.dishId} href={`/dish/${dish.dishId}${dish.referrer ? `?ref=${dish.referrer}` : ''}`}>
                 <div className="bg-white border border-gray-100 rounded-2xl p-3 hover:shadow-md hover:border-gray-200 transition-all relative group">
                   <div className="flex gap-3">
                     {/* Image */}

@@ -20,6 +20,35 @@ interface MapRestaurant {
   tmapRating: number;
 }
 
+interface HoldingWithDetails {
+  dishId: string;
+  name: string;
+  image?: string;
+  quantity: number;
+  currentPrice: number;
+  totalValue: number;
+  returnValue: number;
+  restaurantName?: string;
+  referredBy?: {
+    fid: number;
+    username: string;
+  } | null;
+}
+
+interface CreatedDishWithReferrals {
+  dishId: string;
+  name: string;
+  image?: string;
+  currentPrice: number;
+  currentSupply: number;
+  totalHolders: number;
+  restaurantName?: string;
+  referredTo: {
+    fid: number;
+    username: string;
+  }[];
+}
+
 // Helper to format currency
 function formatCurrency(value: number): string {
   if (value >= 1000) {
@@ -53,6 +82,8 @@ export default function ProfilePage() {
   const [showCityPicker, setShowCityPicker] = useState(false);
   const [currentLocationCity, setCurrentLocationCity] = useState<string>("Loading...");
   const [wishlistCount, setWishlistCount] = useState<number>(0);
+  const [holdings, setHoldings] = useState<HoldingWithDetails[]>([]);
+  const [createdDishes, setCreatedDishes] = useState<CreatedDishWithReferrals[]>([]);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -94,6 +125,114 @@ export default function ProfilePage() {
         if (wishlistRes.ok) {
           const wishlistData = await wishlistRes.json();
           setWishlistCount(wishlistData.wishlist?.length || 0);
+        }
+
+        // Fetch detailed holdings with dish info and referrer usernames
+        const userRes2 = await fetch(`/api/users/${fid}`);
+        if (userRes2.ok) {
+          const userData = await userRes2.json();
+          const portfolio = userData.user?.portfolio;
+
+          if (portfolio?.dishes) {
+            const holdingsPromises = portfolio.dishes.map(async (item: { dish: string; quantity: number; return: number; referredBy?: number | null; referredTo?: number[] }) => {
+              try {
+                const dishRes = await fetch(`/api/dish/${item.dish}`);
+                if (!dishRes.ok) return null;
+                const dishData = await dishRes.json();
+                const dish = dishData.dish;
+
+                // Fetch referrer username if exists
+                let referredByInfo = null;
+                if (item.referredBy) {
+                  try {
+                    const referrerRes = await fetch(`/api/users/${item.referredBy}`);
+                    if (referrerRes.ok) {
+                      const referrerData = await referrerRes.json();
+                      referredByInfo = {
+                        fid: item.referredBy,
+                        username: referrerData.user?.username || `User #${item.referredBy}`,
+                      };
+                    }
+                  } catch {
+                    referredByInfo = { fid: item.referredBy, username: `User #${item.referredBy}` };
+                  }
+                }
+
+                return {
+                  dishId: item.dish,
+                  name: dish?.name || "Unknown Dish",
+                  image: dish?.image,
+                  quantity: item.quantity,
+                  currentPrice: dish?.currentPrice || 0,
+                  totalValue: (dish?.currentPrice || 0) * item.quantity,
+                  returnValue: item.return || 0,
+                  restaurantName: dish?.restaurantName,
+                  referredBy: referredByInfo,
+                };
+              } catch {
+                return null;
+              }
+            });
+
+            const holdingsResults = (await Promise.all(holdingsPromises)).filter(Boolean) as HoldingWithDetails[];
+            setHoldings(holdingsResults);
+
+            // Fetch created dishes with referredTo info
+            const createdRes = await fetch(`/api/dish/created?fid=${fid}`);
+            if (createdRes.ok) {
+              const createdData = await createdRes.json();
+
+              // Build map of referredTo from portfolio
+              const referredToMap = new Map<string, number[]>();
+              portfolio.dishes.forEach((item: { dish: string; referredTo?: number[] }) => {
+                if (item.referredTo && item.referredTo.length > 0) {
+                  referredToMap.set(item.dish, item.referredTo);
+                }
+              });
+
+              const createdDishesPromises = (createdData.dishes || []).map(async (dish: {
+                dishId: string;
+                name: string;
+                image?: string;
+                currentPrice?: number;
+                currentSupply?: number;
+                totalHolders?: number;
+                restaurantName?: string;
+              }) => {
+                const referredToFids = referredToMap.get(dish.dishId) || [];
+
+                // Fetch usernames for referredTo
+                const referredToPromises = referredToFids.map(async (refFid: number) => {
+                  try {
+                    const userRes3 = await fetch(`/api/users/${refFid}`);
+                    if (userRes3.ok) {
+                      const userData3 = await userRes3.json();
+                      return { fid: refFid, username: userData3.user?.username || `User #${refFid}` };
+                    }
+                  } catch {
+                    // ignore
+                  }
+                  return { fid: refFid, username: `User #${refFid}` };
+                });
+
+                const referredTo = await Promise.all(referredToPromises);
+
+                return {
+                  dishId: dish.dishId,
+                  name: dish.name,
+                  image: dish.image,
+                  currentPrice: dish.currentPrice || 0,
+                  currentSupply: dish.currentSupply || 0,
+                  totalHolders: dish.totalHolders || 0,
+                  restaurantName: dish.restaurantName,
+                  referredTo,
+                };
+              });
+
+              const createdDishesResults = await Promise.all(createdDishesPromises);
+              setCreatedDishes(createdDishesResults);
+            }
+          }
         }
       } catch (err) {
         console.error("Failed to load user:", err);
@@ -413,38 +552,52 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Stamps Section */}
+      {/* Your Holdings Section */}
       <div className="px-4">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Stamps</h2>
 
-        {user?.portfolio.dishes && user.portfolio.dishes.length > 0 ? (
+        {holdings.length > 0 ? (
           <div className="space-y-3">
-            {user.portfolio.dishes.map((holding, index) => (
-              <div
-                key={holding.dish}
-                className="bg-white rounded-2xl p-4 border border-gray-100"
+            {holdings.map((holding) => (
+              <Link
+                key={holding.dishId}
+                href={`/dish/${holding.dishId}`}
+                className="block bg-white rounded-2xl p-4 border border-gray-100 hover:border-gray-200 transition-colors"
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      Dish #{index + 1}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {holding.quantity} Stamps
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className={`font-medium ${holding.return >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {holding.return >= 0 ? '+' : ''}{formatCurrency(holding.return)}
-                    </p>
+                <div className="flex gap-3">
+                  <img
+                    src={holding.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"}
+                    alt={holding.name}
+                    className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between">
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{holding.name}</p>
+                        <p className="text-sm text-gray-500">{holding.quantity} Stamps</p>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-2">
+                        <p className="font-semibold text-gray-900">${holding.totalValue.toFixed(2)}</p>
+                        <p className={`text-sm ${holding.returnValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {holding.returnValue >= 0 ? '+' : ''}{formatCurrency(holding.returnValue)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-gray-500">
+                      <span>${holding.currentPrice.toFixed(2)} each</span>
+                      {holding.restaurantName && <span>{holding.restaurantName}</span>}
+                    </div>
                     {holding.referredBy && (
-                      <p className="text-xs text-gray-400">
-                        Referred by #{holding.referredBy}
+                      <p className="text-xs text-purple-600 mt-1 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        Referred by @{holding.referredBy.username}
                       </p>
                     )}
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         ) : (
@@ -455,22 +608,76 @@ export default function ProfilePage() {
               </svg>
             </div>
             <p className="text-gray-500 mb-4">No Stamps yet</p>
-            <a
+            <Link
               href="/explore"
               className="inline-block btn-primary px-6 py-2 rounded-xl text-sm font-medium"
             >
               Explore Dishes
-            </a>
+            </Link>
           </div>
         )}
-
-        {/* View Past Activity */}
-        {user?.portfolio.dishes && user.portfolio.dishes.length > 0 && (
-          <button className="btn-dashed mt-4">
-            View Past Activity
-          </button>
-        )}
       </div>
+
+      {/* Stamps You Created Section */}
+      {createdDishes.length > 0 && (
+        <div className="px-4 mt-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Stamps You Created</h2>
+          <div className="space-y-3">
+            {createdDishes.map((dish) => (
+              <Link
+                key={dish.dishId}
+                href={`/dish/${dish.dishId}`}
+                className="block bg-white rounded-2xl p-4 border border-gray-100 hover:border-gray-200 transition-colors"
+              >
+                <div className="flex gap-3">
+                  <div className="relative flex-shrink-0">
+                    <img
+                      src={dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"}
+                      alt={dish.name}
+                      className="w-14 h-14 rounded-xl object-cover"
+                    />
+                    <div className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center">
+                      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 1L9 9l-8 2 6 5-2 8 7-4 7 4-2-8 6-5-8-2-3-8z"/>
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between">
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{dish.name}</p>
+                        {dish.restaurantName && (
+                          <p className="text-xs text-gray-500 truncate">{dish.restaurantName}</p>
+                        )}
+                      </div>
+                      <p className="font-semibold text-green-600 flex-shrink-0 ml-2">
+                        ${dish.currentPrice.toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="flex gap-3 text-xs text-gray-500 mt-1">
+                      <span>{dish.currentSupply} minted</span>
+                      <span>{dish.totalHolders} holders</span>
+                    </div>
+                    {dish.referredTo.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-gray-100">
+                        <p className="text-xs text-green-600 flex items-center gap-1">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Earned 2.5% from {dish.referredTo.length} referral{dish.referredTo.length > 1 ? 's' : ''}:
+                          <span className="font-medium ml-1">
+                            {dish.referredTo.map(u => `@${u.username}`).join(', ')}
+                          </span>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <BottomNav />
     </div>

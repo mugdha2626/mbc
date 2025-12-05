@@ -16,6 +16,10 @@ interface PortfolioHolding {
   totalValue: number;
   dailyPriceChange: number;
   restaurantName?: string;
+  referredBy?: {
+    fid: number;
+    username: string;
+  } | null;
 }
 
 interface CreatedDish {
@@ -30,6 +34,10 @@ interface CreatedDish {
   dailyPriceChange: number;
   restaurantName?: string;
   restaurantAddress?: string;
+  referredTo: {
+    fid: number;
+    username: string;
+  }[];
 }
 
 interface WishlistItem {
@@ -84,12 +92,30 @@ export default function PortfolioPage() {
         }
 
         // Fetch details for each dish in portfolio
-        const holdingsPromises = (portfolio.dishes || []).map(async (item: { dish: string; quantity: number }) => {
+        const holdingsPromises = (portfolio.dishes || []).map(async (item: { dish: string; quantity: number; referredBy?: number | null }) => {
           try {
             const dishRes = await fetch(`/api/dish/${item.dish}`);
             if (!dishRes.ok) return null;
             const dishData = await dishRes.json();
             const dish = dishData.dish;
+
+            // Fetch referrer username if there's a referredBy
+            let referredByInfo = null;
+            if (item.referredBy) {
+              try {
+                const referrerRes = await fetch(`/api/users/${item.referredBy}`);
+                if (referrerRes.ok) {
+                  const referrerData = await referrerRes.json();
+                  referredByInfo = {
+                    fid: item.referredBy,
+                    username: referrerData.user?.username || `User #${item.referredBy}`,
+                  };
+                }
+              } catch {
+                referredByInfo = { fid: item.referredBy, username: `User #${item.referredBy}` };
+              }
+            }
+
             return {
               dishId: item.dish,
               name: dish?.name || "Unknown Dish",
@@ -99,6 +125,7 @@ export default function PortfolioPage() {
               totalValue: (dish?.currentPrice || 0) * item.quantity,
               dailyPriceChange: dish?.dailyPriceChange || 0,
               restaurantName: dish?.restaurantName,
+              referredBy: referredByInfo,
             };
           } catch {
             return null;
@@ -110,7 +137,17 @@ export default function PortfolioPage() {
         let createdDishes: CreatedDish[] = [];
         if (createdRes.ok) {
           const createdData = await createdRes.json();
-          createdDishes = (createdData.dishes || []).map((dish: {
+
+          // Get referredTo data from portfolio for each created dish
+          const portfolioDishesMap = new Map<string, number[]>();
+          (portfolio.dishes || []).forEach((item: { dish: string; referredTo?: number[] }) => {
+            if (item.referredTo && item.referredTo.length > 0) {
+              portfolioDishesMap.set(item.dish, item.referredTo);
+            }
+          });
+
+          // Map created dishes with referredTo info
+          const createdDishesPromises = (createdData.dishes || []).map(async (dish: {
             dishId: string;
             name: string;
             image?: string;
@@ -122,19 +159,46 @@ export default function PortfolioPage() {
             dailyPriceChange?: number;
             restaurantName?: string;
             restaurantAddress?: string;
-          }) => ({
-            dishId: dish.dishId,
-            name: dish.name,
-            image: dish.image,
-            totalHolders: dish.totalHolders || 0,
-            marketCap: dish.marketCap || 0,
-            currentPrice: dish.currentPrice || 0,
-            currentSupply: dish.currentSupply || 0,
-            dailyVolume: dish.dailyVolume || 0,
-            dailyPriceChange: dish.dailyPriceChange || 0,
-            restaurantName: dish.restaurantName,
-            restaurantAddress: dish.restaurantAddress,
-          }));
+          }) => {
+            // Get referredTo FIDs for this dish
+            const referredToFids = portfolioDishesMap.get(dish.dishId) || [];
+
+            // Fetch usernames for each referredTo FID
+            const referredToPromises = referredToFids.map(async (fid: number) => {
+              try {
+                const userRes = await fetch(`/api/users/${fid}`);
+                if (userRes.ok) {
+                  const userData = await userRes.json();
+                  return {
+                    fid,
+                    username: userData.user?.username || `User #${fid}`,
+                  };
+                }
+              } catch {
+                // ignore
+              }
+              return { fid, username: `User #${fid}` };
+            });
+
+            const referredTo = await Promise.all(referredToPromises);
+
+            return {
+              dishId: dish.dishId,
+              name: dish.name,
+              image: dish.image,
+              totalHolders: dish.totalHolders || 0,
+              marketCap: dish.marketCap || 0,
+              currentPrice: dish.currentPrice || 0,
+              currentSupply: dish.currentSupply || 0,
+              dailyVolume: dish.dailyVolume || 0,
+              dailyPriceChange: dish.dailyPriceChange || 0,
+              restaurantName: dish.restaurantName,
+              restaurantAddress: dish.restaurantAddress,
+              referredTo,
+            };
+          });
+
+          createdDishes = await Promise.all(createdDishesPromises);
         }
 
         const holdings = (await Promise.all(holdingsPromises)).filter(Boolean) as PortfolioHolding[];
@@ -289,9 +353,17 @@ export default function PortfolioPage() {
                           <PriceChange value={holding.dailyPriceChange} size="sm" />
                         </div>
                       </div>
-                      <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-500">
                         <span>Price: ${holding.currentPrice.toFixed(2)}</span>
                         {holding.restaurantName && <span>{holding.restaurantName}</span>}
+                        {holding.referredBy && (
+                          <span className="text-purple-600 flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            Referred by @{holding.referredBy.username}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -356,6 +428,19 @@ export default function PortfolioPage() {
                         <span>Supply: {dish.currentSupply}</span>
                         <span>MC: ${dish.marketCap.toFixed(0)}</span>
                       </div>
+                      {dish.referredTo.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-gray-100">
+                          <p className="text-xs text-green-600 flex items-center gap-1">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Earned 2.5% from {dish.referredTo.length} referral{dish.referredTo.length > 1 ? 's' : ''}:
+                            <span className="font-medium ml-1">
+                              {dish.referredTo.map(u => `@${u.username}`).join(', ')}
+                            </span>
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -403,7 +488,7 @@ export default function PortfolioPage() {
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <Link
-                      href={`/dish/${item.dishId}`}
+                      href={`/dish/${item.dishId}${item.referrer ? `?ref=${item.referrer}` : ''}`}
                       className="px-3 py-1.5 bg-[var(--primary)] text-gray-900 text-sm font-medium rounded-lg hover:bg-[var(--primary-hover)] transition-colors"
                     >
                       Mint

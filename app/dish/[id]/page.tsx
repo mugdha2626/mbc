@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { useAccount, useSendCalls, useCallsStatus } from "wagmi";
 import getFid from "@/app/providers/Fid";
@@ -94,7 +94,9 @@ type MintStep = "idle" | "checking" | "approving" | "minting" | "complete";
 export default function DishPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const dishId = params.id as string;
+  const referrerFid = searchParams.get("ref"); // Referrer FID from wishlist
   const { user } = useFarcaster();
 
   const [dish, setDish] = useState<DishData | null>(null);
@@ -114,6 +116,7 @@ export default function DishPage() {
   );
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
+  const [referrerWallet, setReferrerWallet] = useState<`0x${string}` | null>(null);
 
   const addDebug = (msg: string) => {
     setDebugInfo((prev) => [...prev, msg]);
@@ -260,6 +263,28 @@ export default function DishPage() {
     checkWishlist();
   }, [user?.fid, dishId]);
 
+  // Fetch referrer's wallet address if referrerFid is provided
+  useEffect(() => {
+    const fetchReferrerWallet = async () => {
+      if (!referrerFid) return;
+
+      try {
+        const res = await fetch(`/api/users/${referrerFid}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user?.walletAddress && data.user.walletAddress !== "") {
+            setReferrerWallet(data.user.walletAddress as `0x${string}`);
+            console.log(`Referrer wallet found: ${data.user.walletAddress}`);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching referrer wallet:", err);
+      }
+    };
+
+    fetchReferrerWallet();
+  }, [referrerFid]);
+
   // Handle wishlist toggle
   const handleWishlistToggle = async () => {
     if (!user?.fid) {
@@ -385,6 +410,12 @@ export default function DishPage() {
         }
       }
 
+      // Determine referrer address for the contract call
+      const referrerAddress = referrerWallet || zeroAddress;
+      if (referrerWallet) {
+        addDebug(`Using referrer wallet: ${referrerWallet.slice(0, 10)}...`);
+      }
+
       // Simulate the transaction first to check if it will succeed
       try {
         addDebug("Simulating mint transaction...");
@@ -392,7 +423,7 @@ export default function DishPage() {
           address: TMAP_DISHES_ADDRESS,
           abi: tmapDishesAbi,
           functionName: "mint",
-          args: [dishIdBytes32, amount, zeroAddress],
+          args: [dishIdBytes32, amount, referrerAddress],
           account: address,
         });
         addDebug("Simulation successful - transaction should work");
@@ -466,7 +497,7 @@ export default function DishPage() {
             data: encodeFunctionData({
               abi: tmapDishesAbi,
               functionName: "mint",
-              args: [dishIdBytes32, amount, zeroAddress],
+              args: [dishIdBytes32, amount, referrerAddress],
             }),
           },
         ],
@@ -518,7 +549,7 @@ export default function DishPage() {
       if (isStatusSuccess(mintStatus)) {
         addDebug("Mint complete! Updating dish stats...");
 
-        // Update dish stats in database
+        // Update dish stats in database (including referrer for reputation tracking)
         if (
           lastMintAmount &&
           lastTokensReceived !== null &&
@@ -536,6 +567,7 @@ export default function DishPage() {
                   minterAddress: address,
                   usdcAmount: Number(lastMintAmount) / 1e6,
                   tokensReceived: lastTokensReceived,
+                  referrerFid: referrerFid ? parseInt(referrerFid) : null,
                 }),
               });
 
@@ -547,6 +579,9 @@ export default function DishPage() {
                 );
               } else {
                 addDebug("Dish stats updated successfully!");
+                if (referrerFid) {
+                  addDebug(`Referrer (FID: ${referrerFid}) credited with referral!`);
+                }
               }
             } catch (err) {
               console.error("Error updating dish stats:", err);
@@ -556,6 +591,7 @@ export default function DishPage() {
         }
 
         setMintStep("complete");
+
         // Refresh data
         setTimeout(() => {
           window.location.reload();
@@ -582,6 +618,23 @@ export default function DishPage() {
           if (allSuccess) {
             addDebug("All receipts successful despite failure status!");
             setMintStep("complete");
+
+            // Update database with mint info (including referrer for reputation)
+            if (lastMintAmount && lastTokensReceived !== null && userFid && address) {
+              fetch("/api/dish/mint", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  dishId,
+                  minterFid: userFid,
+                  minterAddress: address,
+                  usdcAmount: Number(lastMintAmount) / 1e6,
+                  tokensReceived: lastTokensReceived,
+                  referrerFid: referrerFid ? parseInt(referrerFid) : null,
+                }),
+              }).catch((err) => console.error("Error updating mint in DB:", err));
+            }
+
             setTimeout(() => {
               window.location.reload();
             }, 2000);
