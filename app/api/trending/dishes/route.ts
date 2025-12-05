@@ -1,5 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
+import { createPublicClient, http, type Hash } from "viem";
+import { baseSepolia } from "viem/chains";
+import { TMAP_DISHES_ADDRESS, TMAP_DISHES_ABI } from "@/lib/contracts";
+import { stringToBytes, pad, toHex } from "viem";
+
+// Public client for reading from contract
+const publicClient = createPublicClient({
+  chain: baseSepolia,
+  transport: http(),
+});
+
+// Convert string dishId to bytes32 for contract calls
+const stringToBytes32 = (str: string): Hash => {
+  // If it's already a hex string (starts with 0x and is 66 chars = 32 bytes)
+  if (str.startsWith("0x") && str.length === 66) {
+    return str as Hash;
+  }
+  // Otherwise, convert string to bytes32
+  const bytes = stringToBytes(str);
+  // Truncate to 32 bytes if longer, or pad if shorter
+  const truncated = bytes.slice(0, 32);
+  const padded = pad(truncated, { size: 32 });
+  return toHex(padded) as Hash;
+};
 
 interface DishDocument {
   dishId: string;
@@ -145,27 +169,61 @@ export async function GET(request: NextRequest) {
     // Base price from bonding curve formula
     const BASE_PRICE = 1.0;
 
+    // Fetch live on-chain prices for all dishes
+    const onChainPrices = new Map<string, number>();
+    if (TMAP_DISHES_ADDRESS) {
+      const pricePromises = dishes.map(async (dish) => {
+        try {
+          const dishIdBytes32 = stringToBytes32(dish.dishId);
+          const priceResult = await publicClient.readContract({
+            address: TMAP_DISHES_ADDRESS,
+            abi: TMAP_DISHES_ABI,
+            functionName: "getCurrentPrice",
+            args: [dishIdBytes32],
+          });
+          return { dishId: dish.dishId, price: Number(priceResult) / 1_000_000 };
+        } catch (err) {
+          console.error(`Error fetching price for dish ${dish.dishId}:`, err);
+          return { dishId: dish.dishId, price: dish.currentPrice }; // Fallback to DB price
+        }
+      });
+
+      const priceResults = await Promise.all(pricePromises);
+      priceResults.forEach((result) => {
+        onChainPrices.set(result.dishId, result.price);
+      });
+    }
+
     const scoredDishes = dishes
       // Filter out dishes still at or below starting price ($1.00)
-      .filter(dish => dish.currentPrice > BASE_PRICE)
+      .filter(dish => {
+        const livePrice = onChainPrices.get(dish.dishId) || dish.currentPrice;
+        return livePrice > BASE_PRICE;
+      })
       .map(dish => {
         const restaurant = restaurantMap.get(dish.restaurant);
         const distance = restaurant && hasLocation
           ? getDistance(lat, lng, restaurant.latitude, restaurant.longitude)
           : null;
 
+        // Use live on-chain price if available, otherwise fallback to DB price
+        const livePrice = onChainPrices.get(dish.dishId) || dish.currentPrice;
+
         // Use BASE_PRICE as the minimum starting price to avoid inflated percentages
         // Some older dishes may have incorrect or missing startingPrice values
         const effectiveStartingPrice = Math.max(dish.startingPrice || BASE_PRICE, BASE_PRICE);
 
-        // Calculate price change percentage from the effective starting price
-        const priceChange = ((dish.currentPrice - effectiveStartingPrice) / effectiveStartingPrice) * 100;
+        // Calculate price change percentage from the effective starting price using live price
+        const priceChange = ((livePrice - effectiveStartingPrice) / effectiveStartingPrice) * 100;
+
+        // Create a modified dish object with the live price for trending score calculation
+        const dishWithLivePrice = { ...dish, currentPrice: livePrice };
 
         return {
           dishId: dish.dishId,
           name: dish.name,
           image: dish.image,
-          currentPrice: dish.currentPrice,
+          currentPrice: livePrice,
           startingPrice: effectiveStartingPrice,
           priceChange,
           totalHolders: dish.totalHolders,
@@ -176,7 +234,7 @@ export async function GET(request: NextRequest) {
           creatorUsername: creatorMap.get(dish.creator) || `user_${dish.creator}`,
           creatorFid: dish.creator,
           distance,
-          trendingScore: calculateTrendingScore(dish),
+          trendingScore: calculateTrendingScore(dishWithLivePrice),
           createdAt: dish.createdAt,
           isNew: (new Date().getTime() - new Date(dish.createdAt).getTime()) < (2 * 60 * 60 * 1000),
         };
