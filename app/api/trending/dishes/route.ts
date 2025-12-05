@@ -143,6 +143,8 @@ export async function GET(request: NextRequest) {
     const hasLocation = lat !== 0 && lng !== 0;
 
     const scoredDishes = dishes
+      // Filter out dishes still at starting price ($0.10)
+      .filter(dish => dish.currentPrice > 0.10)
       .map(dish => {
         const restaurant = restaurantMap.get(dish.restaurant);
         const distance = restaurant && hasLocation
@@ -168,7 +170,7 @@ export async function GET(request: NextRequest) {
           distance,
           trendingScore: calculateTrendingScore(dish),
           createdAt: dish.createdAt,
-          isNew: (new Date().getTime() - new Date(dish.createdAt).getTime()) < (7 * 24 * 60 * 60 * 1000),
+          isNew: (new Date().getTime() - new Date(dish.createdAt).getTime()) < (2 * 60 * 60 * 1000),
         };
       })
       .filter(dish => {
