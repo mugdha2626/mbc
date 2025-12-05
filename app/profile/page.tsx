@@ -204,7 +204,8 @@ export default function ProfilePage() {
                   const dish = dishData.dish;
 
                   // Fetch referrer username if exists
-                  let referredByInfo = null;
+                  let referredByInfo: { fid: number; username: string } | null =
+                    null;
                   if (item.referredBy) {
                     try {
                       const referrerRes = await fetch(

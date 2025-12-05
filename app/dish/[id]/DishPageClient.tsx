@@ -104,7 +104,9 @@ export default function DishPageClient() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
-  const dishId = params.id as string;
+  const rawDishId = params.id as string;
+  // Decode the dishId since it may be URL-encoded
+  const dishId = rawDishId ? decodeURIComponent(rawDishId) : "";
   const referrerFid = searchParams.get("ref"); // Referrer FID from wishlist
   const { user } = useFarcaster();
 
@@ -296,89 +298,81 @@ export default function DishPageClient() {
     fetchUsdcBalance();
   }, [address]);
 
-  // Fetch user's token holdings for this dish from database
-  // Using loading as trigger to run after dish is loaded
-  useEffect(() => {
-    console.log(
-      "[Holdings Effect] userFid:",
-      userFid,
-      "dishId:",
-      dishId,
-      "loading:",
-      loading
-    );
+  // State to track user's holdings for this dish
+  const [userHolding, setUserHolding] = useState<{
+    quantity: number;
+    value: number;
+  } | null>(null);
 
+  // Fetch user's token holdings for this dish from database
+  useEffect(() => {
     const fetchUserHoldings = async () => {
-      if (!userFid || !dishId || loading) {
-        console.log(
-          "[Holdings] Skipping - userFid:",
-          !!userFid,
-          "dishId:",
-          !!dishId,
-          "loading:",
-          loading
-        );
+      // Need userFid to fetch user data
+      if (!userFid) {
+        console.log("[Holdings] No userFid yet");
         return;
       }
 
-      console.log("[Holdings] Fetching holdings for user:", userFid);
+      // Need dishId to match against
+      if (!dishId) {
+        console.log("[Holdings] No dishId");
+        return;
+      }
+
+      console.log(
+        "[Holdings] Fetching for userFid:",
+        userFid,
+        "dishId:",
+        dishId
+      );
 
       try {
-        // Fetch user data from database
         const res = await fetch(`/api/users/${userFid}`);
         if (!res.ok) {
-          console.log("[Holdings] API returned not ok:", res.status);
+          console.log("[Holdings] API error:", res.status);
           return;
         }
 
         const data = await res.json();
-        const portfolio = data.user?.portfolio;
+        console.log("[Holdings] User data:", data);
 
-        console.log("[Holdings] Portfolio dishes:", portfolio?.dishes);
-        console.log("[Holdings] Looking for dishId:", dishId);
+        const portfolioDishes = data.user?.portfolio?.dishes;
+        console.log("[Holdings] Portfolio dishes:", portfolioDishes);
 
-        if (portfolio?.dishes) {
-          // Find this dish in the user's portfolio
-          const dishHolding = portfolio.dishes.find(
-            (d: { dish: string; quantity: number }) => d.dish === dishId
+        if (portfolioDishes && Array.isArray(portfolioDishes)) {
+          // Find the dish in the portfolio
+          const holding = portfolioDishes.find(
+            (item: { dish: string; quantity: number }) => item.dish === dishId
           );
 
-          console.log("[Holdings] Found holding:", dishHolding);
+          console.log("[Holdings] Found holding:", holding);
 
-          if (dishHolding && dishHolding.quantity > 0) {
-            // Get current price for value calculation - use onChainPrice or fallback
-            const currentPrice = onChainPrice || 0.1;
-            const totalValue = dishHolding.quantity * currentPrice;
-
+          if (holding && holding.quantity > 0) {
+            const price = onChainPrice || dish?.currentPrice || 0.1;
+            setUserHolding({
+              quantity: holding.quantity,
+              value: holding.quantity * price,
+            });
             console.log(
-              "[Holdings] Setting yourHolding:",
-              dishHolding.quantity,
-              "yourValue:",
-              totalValue
-            );
-
-            setDish((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    yourHolding: dishHolding.quantity,
-                    yourValue: totalValue,
-                  }
-                : prev
+              "[Holdings] Set userHolding:",
+              holding.quantity,
+              "value:",
+              holding.quantity * price
             );
           } else {
-            console.log("[Holdings] No holding found or quantity is 0");
+            setUserHolding(null);
+            console.log("[Holdings] No holding found for this dish");
           }
         } else {
-          console.log("[Holdings] No portfolio.dishes found");
+          console.log("[Holdings] No portfolio dishes array");
         }
       } catch (err) {
-        console.error("Error fetching user holdings:", err);
+        console.error("[Holdings] Error:", err);
       }
     };
 
     fetchUserHoldings();
-  }, [userFid, dishId, loading, onChainPrice]);
+  }, [userFid, dishId, onChainPrice, dish?.currentPrice]);
 
   // Check if dish is in user's wishlist
   useEffect(() => {
@@ -1030,7 +1024,7 @@ export default function DishPageClient() {
 
   // Open sell modal
   const openSellModal = () => {
-    if (!dish || !dish.yourHolding || dish.yourHolding <= 0) return;
+    if (!dish || !userHolding || userHolding.quantity <= 0) return;
     setSellAmount(1);
     setSellValue(null);
     setSellError("");
@@ -1110,10 +1104,7 @@ export default function DishPageClient() {
       return;
     }
 
-    if (
-      sellAmount <= 0 ||
-      (dish.yourHolding && sellAmount > dish.yourHolding)
-    ) {
+    if (sellAmount <= 0 || (userHolding && sellAmount > userHolding.quantity)) {
       setSellError("Invalid amount");
       return;
     }
@@ -1350,34 +1341,19 @@ export default function DishPageClient() {
           </div>
 
           {/* Your Holdings */}
-          {dish.yourHolding && dish.yourHolding > 0 && (
+          {userHolding && userHolding.quantity > 0 && (
             <div className="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200/50 rounded-2xl p-4 mb-6 shadow-sm">
               <div className="flex items-center gap-2 mb-3">
-                {/* <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
-                  <svg
-                    className="w-4 h-4 text-purple-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-                    />
-                  </svg>
-                </div> */}
                 <h3 className="font-semibold text-gray-900">Your Holdings</h3>
               </div>
               <div className="flex justify-between items-end">
                 <div>
                   <p className="text-xs text-purple-600/70 uppercase tracking-wide font-medium mb-1">
-                    {dish.yourHolding}{" "}
-                    {dish.yourHolding === 1 ? "stamp" : "stamps"}
+                    {userHolding.quantity}{" "}
+                    {userHolding.quantity === 1 ? "stamp" : "stamps"}
                   </p>
                   <p className="text-2xl font-bold text-gray-900">
-                    ${(dish.yourValue || 0).toFixed(2)}
+                    ${userHolding.value.toFixed(2)}
                   </p>
                 </div>
                 <button
@@ -1526,7 +1502,7 @@ export default function DishPageClient() {
       </div>
 
       {/* Sell Modal */}
-      {sellModalOpen && dish && dish.yourHolding && dish.yourHolding > 0 && (
+      {sellModalOpen && dish && userHolding && userHolding.quantity > 0 && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center"
           onClick={closeSellModal}
@@ -1576,7 +1552,7 @@ export default function DishPageClient() {
                     {dish.name}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {dish.yourHolding} stamps · $
+                    {userHolding.quantity} stamps · $
                     {dish.currentPrice?.toFixed(2) || "0.00"} each
                   </p>
                 </div>
@@ -1605,11 +1581,11 @@ export default function DishPageClient() {
                   <button
                     onClick={() =>
                       setSellAmount(
-                        Math.min(dish.yourHolding || 1, sellAmount + 1)
+                        Math.min(userHolding.quantity, sellAmount + 1)
                       )
                     }
                     disabled={
-                      sellAmount >= (dish.yourHolding || 0) ||
+                      sellAmount >= userHolding.quantity ||
                       isSellPending ||
                       isSellConfirming
                     }
@@ -1619,7 +1595,7 @@ export default function DishPageClient() {
                   </button>
                 </div>
                 {/* Quick select buttons */}
-                {dish.yourHolding > 1 && (
+                {userHolding.quantity > 1 && (
                   <div className="flex gap-2 justify-center mt-2">
                     <button
                       onClick={() => setSellAmount(1)}
@@ -1631,13 +1607,13 @@ export default function DishPageClient() {
                     >
                       1
                     </button>
-                    {dish.yourHolding >= 2 && (
+                    {userHolding.quantity >= 2 && (
                       <button
                         onClick={() =>
-                          setSellAmount(Math.floor((dish.yourHolding || 0) / 2))
+                          setSellAmount(Math.floor(userHolding.quantity / 2))
                         }
                         className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
-                          sellAmount === Math.floor((dish.yourHolding || 0) / 2)
+                          sellAmount === Math.floor(userHolding.quantity / 2)
                             ? "bg-primary-soft text-primary-dark"
                             : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                         }`}
@@ -1646,9 +1622,9 @@ export default function DishPageClient() {
                       </button>
                     )}
                     <button
-                      onClick={() => setSellAmount(dish.yourHolding || 1)}
+                      onClick={() => setSellAmount(userHolding.quantity)}
                       className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
-                        sellAmount === dish.yourHolding
+                        sellAmount === userHolding.quantity
                           ? "bg-primary-soft text-primary-dark"
                           : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                       }`}
