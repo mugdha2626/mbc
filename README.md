@@ -19,7 +19,7 @@ Note: Require Base USDC on the testnet. Use the "Get $5" Faucet in case you dont
 
 ## Features
 
-- **Bonding Curve Pricing**: Price = `0.1 + (supply × 0.0125)` USDC
+- **Bonding Curve Pricing**: Price = `1 + (supply × 0.125)` USDC
 - **$10 Max Spend**: Per user, per dish
 - **70% Sell Value**: Sell anytime and get 70% of current market value
 - **2.5% Referral Rewards**: Share dishes and earn 2.5% referrak reward on every mint (check the rewards page!)
