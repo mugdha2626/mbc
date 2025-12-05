@@ -27,7 +27,7 @@ export function SearchBar({ placeholder = "Search dishes, cuisine...", onSearch 
         value={query}
         onChange={handleChange}
         placeholder={placeholder}
-        className="w-full bg-white border border-gray-200 rounded-full py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[var(--primary-hover)] focus:border-transparent transition-all"
+        className="w-full glass rounded-full py-2.5 pl-10 pr-4 text-sm text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-[var(--primary-hover)] focus:border-transparent transition-all"
       />
     </div>
   );

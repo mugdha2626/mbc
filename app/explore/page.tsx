@@ -69,21 +69,21 @@ export default function ExplorePage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-screen bg-gradient-pink pb-24">
       {/* Header */}
-      <header className="bg-white px-4 py-4 border-b border-gray-100">
-        <h1 className="text-xl font-bold text-gray-900">Explore</h1>
+      <header className="glass-strong px-4 py-4 border-b border-card-border">
+        <h1 className="text-xl font-bold text-foreground">Explore</h1>
       </header>
 
       {/* Tab Switcher */}
-      <div className="bg-white px-4 py-3 border-b border-gray-100">
-        <div className="flex gap-2 bg-gray-100 rounded-xl p-1">
+      <div className="glass-soft px-4 py-3 border-b border-card-border">
+        <div className="flex gap-2 glass rounded-xl p-1">
           <button
             onClick={() => setActiveTab("dishes")}
             className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
               activeTab === "dishes"
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
+                ? "glass-strong text-foreground card-shadow"
+                : "text-primary-text hover:text-foreground"
             }`}
           >
             Dishes
@@ -92,8 +92,8 @@ export default function ExplorePage() {
             onClick={() => setActiveTab("restaurants")}
             className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
               activeTab === "restaurants"
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
+                ? "glass-strong text-foreground card-shadow"
+                : "text-primary-text hover:text-foreground"
             }`}
           >
             Restaurants
@@ -102,7 +102,7 @@ export default function ExplorePage() {
       </div>
 
       {/* Map Section */}
-      <div className="relative h-48 bg-gray-200">
+      <div className="relative h-48 bg-gradient-pink">
         <GoogleMapView
           apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}
           center={userLocation}
@@ -113,7 +113,7 @@ export default function ExplorePage() {
       </div>
 
       {/* Filters - Center Aligned */}
-      <div className="bg-white px-4 py-3 border-b border-gray-100">
+      <div className="glass-soft px-4 py-3 border-b border-card-border">
         <div className="flex gap-2 justify-center">
           {exploreFilters.map((filter) => (
             <button
@@ -122,7 +122,7 @@ export default function ExplorePage() {
               className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
                 activeFilter === filter.id
                   ? "btn-primary"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  : "glass-soft text-primary-text hover:glass-primary hover:text-foreground"
               }`}
             >
               {filter.label}
@@ -135,15 +135,15 @@ export default function ExplorePage() {
       <div className="p-4">
         {activeTab === "dishes" ? (
           <div className="space-y-3">
-            <h2 className="text-lg font-semibold text-gray-900 mb-3">Trending Now</h2>
+            <h2 className="text-lg font-semibold text-foreground mb-3">Trending Now</h2>
             {trendingDishes.map((dish) => (
               <BackedDishCard key={dish.id} {...dish} />
             ))}
           </div>
         ) : (
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-gray-900 mb-3">Featured Restaurants</h2>
-            <p className="text-gray-500">Coming soon...</p>
+            <h2 className="text-lg font-semibold text-foreground mb-3">Featured Restaurants</h2>
+            <p className="text-primary-text">Coming soon...</p>
           </div>
         )}
       </div>

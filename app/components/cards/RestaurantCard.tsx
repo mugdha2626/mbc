@@ -24,7 +24,7 @@ export function RestaurantCard({
 }: RestaurantCardProps) {
   return (
     <Link href={`/restaurant/${id}`}>
-      <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden hover:border-gray-200 transition-all shadow-sm">
+      <div className="glass rounded-2xl overflow-hidden hover:glass-strong transition-all card-shadow">
         {/* Image */}
         <div className="relative h-32">
           <img
@@ -33,7 +33,7 @@ export function RestaurantCard({
             className="w-full h-full object-cover"
           />
           {badge && (
-            <div className="absolute top-3 right-3 bg-orange-500 text-white text-xs font-semibold px-2 py-1 rounded-full flex items-center gap-1">
+            <div className="absolute top-3 right-3 glass-yellow text-primary-text text-xs font-semibold px-2 py-1 rounded-full flex items-center gap-1 backdrop-blur-md">
               <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 15a4 4 0 004-4V4H8v7a4 4 0 004 4zm-6-4V4H4a2 2 0 00-2 2v3a3 3 0 003 3h1v-1zm12 0h1a3 3 0 003-3V6a2 2 0 00-2-2h-2v7zM9 18h6v3H9v-3z"/></svg>
               {badge}
             </div>
@@ -50,13 +50,13 @@ export function RestaurantCard({
             ))}
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-gray-500">
+          <div className="flex items-center gap-2 text-xs text-primary-text">
             <svg className="w-2 h-2 text-[var(--primary-dark)]" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>
             <span className="truncate">{address}</span>
           </div>
 
-          <div className="mt-3 pt-3 border-t border-gray-100">
-            <span className="text-sm text-gray-500">
+          <div className="mt-3 pt-3 border-t border-card-border">
+            <span className="text-sm text-primary-text glass-soft px-2 py-1 rounded-full inline-block">
               {topDishCount} dishes available
             </span>
           </div>

@@ -118,7 +118,9 @@ export default function DishPage() {
   );
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
-  const [referrerWallet, setReferrerWallet] = useState<`0x${string}` | null>(null);
+  const [referrerWallet, setReferrerWallet] = useState<`0x${string}` | null>(
+    null
+  );
 
   // Wagmi hooks
   const { address, isConnected } = useAccount();
@@ -199,11 +201,15 @@ export default function DishPage() {
 
     const fetchHolders = async () => {
       try {
-        const res = await fetch(`/api/dish/${encodeURIComponent(dishId)}/holders`);
+        const res = await fetch(
+          `/api/dish/${encodeURIComponent(dishId)}/holders`
+        );
         if (!res.ok) return;
         const data = await res.json();
         const holderCount = Number(data.holderCount || 0);
-        setDish((prev) => (prev ? { ...prev, totalHolders: holderCount } : prev));
+        setDish((prev) =>
+          prev ? { ...prev, totalHolders: holderCount } : prev
+        );
       } catch (err) {
         console.error("Error fetching holder count:", err);
       }
@@ -596,7 +602,9 @@ export default function DishPage() {
               } else {
                 addDebug("Dish stats updated successfully!");
                 if (referrerFid) {
-                  addDebug(`Referrer (FID: ${referrerFid}) credited with referral!`);
+                  addDebug(
+                    `Referrer (FID: ${referrerFid}) credited with referral!`
+                  );
                 }
               }
             } catch (err) {
@@ -636,7 +644,12 @@ export default function DishPage() {
             setMintStep("complete");
 
             // Update database with mint info (including referrer for reputation)
-            if (lastMintAmount && lastTokensReceived !== null && userFid && address) {
+            if (
+              lastMintAmount &&
+              lastTokensReceived !== null &&
+              userFid &&
+              address
+            ) {
               fetch("/api/dish/mint", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -648,7 +661,9 @@ export default function DishPage() {
                   tokensReceived: lastTokensReceived,
                   referrerFid: referrerFid ? parseInt(referrerFid) : null,
                 }),
-              }).catch((err) => console.error("Error updating mint in DB:", err));
+              }).catch((err) =>
+                console.error("Error updating mint in DB:", err)
+              );
             }
 
             setTimeout(() => {
@@ -834,9 +849,9 @@ export default function DishPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-xl font-semibold text-gray-900">
+      <div className="min-h-screen bg-gradient-pink flex items-center justify-center">
+        <div className="text-center glass rounded-xl p-6 card-shadow">
+          <div className="text-xl font-semibold text-foreground">
             Loading dish...
           </div>
         </div>
@@ -846,14 +861,14 @@ export default function DishPage() {
 
   if (!dish) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-xl font-semibold text-gray-900">
+      <div className="min-h-screen bg-gradient-pink flex items-center justify-center">
+        <div className="text-center glass rounded-xl p-6 card-shadow">
+          <div className="text-xl font-semibold text-foreground">
             Dish not found
           </div>
           <button
             onClick={() => router.back()}
-            className="mt-4 px-4 py-2 bg-primary text-white rounded-xl"
+            className="mt-4 px-4 py-2 btn-primary rounded-xl"
           >
             Go Back
           </button>
@@ -863,7 +878,7 @@ export default function DishPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-pink">
       {/* Hero Image */}
       <div className="relative h-72">
         <img
@@ -874,15 +889,15 @@ export default function DishPage() {
           alt={dish.name}
           className="w-full h-full object-cover"
         />
-        <div className="absolute inset-0 bg-linear-to-t from-black/70 via-black/20 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)] via-black/30 to-transparent" />
 
         {/* Back button */}
         <button
           onClick={() => router.back()}
-          className="absolute top-4 left-4 p-2 rounded-full bg-white/90 backdrop-blur-sm hover:bg-white transition-colors shadow-sm"
+          className="absolute top-4 left-4 p-2 rounded-full glass-strong hover:glass transition-colors card-shadow"
         >
           <svg
-            className="w-5 h-5 text-gray-700"
+            className="w-5 h-5 text-foreground"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -902,10 +917,10 @@ export default function DishPage() {
           <button
             onClick={handleWishlistToggle}
             disabled={wishlistLoading}
-            className={`p-2 rounded-full backdrop-blur-sm transition-colors shadow-sm ${
+            className={`p-2 rounded-full glass-strong hover:glass transition-colors card-shadow ${
               isWishlisted
-                ? "bg-red-500 text-white hover:bg-red-600"
-                : "bg-white/90 hover:bg-white text-gray-700"
+                ? "bg-primary-dark text-white hover:bg-primary-dark/90"
+                : "text-foreground"
             } disabled:opacity-50`}
           >
             <svg
@@ -924,9 +939,9 @@ export default function DishPage() {
           </button>
 
           {/* Share button */}
-          <button className="p-2 rounded-full bg-white/90 backdrop-blur-sm hover:bg-white transition-colors shadow-sm">
+          <button className="p-2 rounded-full glass-strong hover:glass transition-colors card-shadow">
             <svg
-              className="w-5 h-5 text-gray-700"
+              className="w-5 h-5 text-foreground"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -943,12 +958,14 @@ export default function DishPage() {
 
         {/* Dish name overlay */}
         <div className="absolute bottom-8 left-4 right-4">
-          <h1 className="text-2xl font-bold text-white">{dish.name}</h1>
+          <h1 className="text-2xl font-bold text-white drop-shadow-lg">
+            {dish.name}
+          </h1>
         </div>
       </div>
 
       {/* Content */}
-      <div className="bg-white rounded-t-3xl -mt-4 relative">
+      <div className="glass rounded-t-3xl -mt-6 relative z-10">
         <div className="px-4 py-4">
           {/* Restaurant & Creator Info */}
           <div className="flex items-center justify-between mb-4">
@@ -965,16 +982,16 @@ export default function DishPage() {
                 className="w-10 h-10 rounded-full object-cover"
               />
               <div>
-                <p className="font-medium text-gray-900">
+                <p className="font-medium text-foreground">
                   {dish.restaurantName}
                 </p>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-primary-text opacity-70">
                   {dish.restaurantAddress}
                 </p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-sm text-gray-500">Created by</p>
+              <p className="text-sm text-primary-text opacity-70">Created by</p>
               <p className="text-sm font-medium text-primary-dark">
                 @{dish.creatorUsername}
               </p>
@@ -983,21 +1000,25 @@ export default function DishPage() {
 
           {/* Description */}
           {dish.description && (
-            <p className="text-gray-600 mb-4">{dish.description}</p>
+            <p className="text-primary-text mb-4">{dish.description}</p>
           )}
 
           {/* Stats Grid */}
-          <div className="bg-gray-50 rounded-2xl p-4 mb-6">
+          <div className="glass-soft rounded-2xl p-4 mb-6">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-gray-500 mb-1">Current Price</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-sm text-primary-text opacity-70 mb-1">
+                  Current Price
+                </p>
+                <p className="text-2xl font-bold text-primary-dark">
                   ${currentPrice.toFixed(2)}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-gray-500 mb-1">Market Cap</p>
-                <p className="text-2xl font-bold text-gray-900">
+                <p className="text-sm text-primary-text opacity-70 mb-1">
+                  Market Cap
+                </p>
+                <p className="text-2xl font-bold text-foreground">
                   $
                   {(
                     dish.marketCap || currentPrice * (dish.currentSupply || 0)
@@ -1005,24 +1026,28 @@ export default function DishPage() {
                 </p>
               </div>
               <div>
-                <p className="text-sm text-gray-500 mb-1">24h Volume</p>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-sm text-primary-text opacity-70 mb-1">
+                  24h Volume
+                </p>
+                <p className="text-lg font-semibold text-foreground">
                   ${dish.dailyVolume?.toFixed(2) || "0.00"}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-gray-500 mb-1">Total Holders</p>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-sm text-primary-text opacity-70 mb-1">
+                  Total Holders
+                </p>
+                <p className="text-lg font-semibold text-foreground">
                   {dish.totalHolders || 0}
                 </p>
               </div>
             </div>
-            <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">
+            <div className="mt-4 pt-4 border-t border-card-border flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {(dish.dailyPriceChange ?? 0) >= 0 ? (
                   <>
                     <svg
-                      className="w-4 h-4 text-green-500"
+                      className="w-4 h-4 text-primary-dark"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -1034,14 +1059,14 @@ export default function DishPage() {
                         d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
                       />
                     </svg>
-                    <span className="font-medium text-green-600">
+                    <span className="font-medium text-primary-dark">
                       Up {dish.dailyPriceChange || 0}% today
                     </span>
                   </>
                 ) : (
                   <>
                     <svg
-                      className="w-4 h-4 text-red-500"
+                      className="w-4 h-4 text-primary-dark opacity-60"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -1053,13 +1078,13 @@ export default function DishPage() {
                         d="M13 17h8m0 0v-8m0 8l-8-8-4 4-6-6"
                       />
                     </svg>
-                    <span className="font-medium text-red-600">
+                    <span className="font-medium text-primary-dark opacity-60">
                       Down {Math.abs(dish.dailyPriceChange ?? 0)}% today
                     </span>
                   </>
                 )}
               </div>
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-primary-text opacity-70">
                 Supply: {dish.currentSupply || 0}
               </div>
             </div>
@@ -1067,20 +1092,20 @@ export default function DishPage() {
 
           {/* Your Holdings */}
           {dish.yourHolding && dish.yourHolding > 0 && (
-            <div className="bg-primary-softer border border-primary rounded-2xl p-4 mb-6">
-              <h3 className="font-semibold text-gray-900 mb-2">
+            <div className="glass-primary border border-primary-dark/30 rounded-2xl p-4 mb-6">
+              <h3 className="font-semibold text-foreground mb-2">
                 Your Holdings
               </h3>
               <div className="flex justify-between items-center">
                 <div>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-primary-text opacity-70">
                     {dish.yourHolding} tokens
                   </p>
                   <p className="text-lg font-bold text-primary-dark">
                     ${(dish.yourValue || 0).toFixed(2)}
                   </p>
                 </div>
-                <button className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50">
+                <button className="px-4 py-2 glass hover:glass-strong border border-card-border rounded-xl text-sm font-medium text-foreground transition-all">
                   Cash Out
                 </button>
               </div>
@@ -1088,16 +1113,16 @@ export default function DishPage() {
           )}
 
           {/* Back More Section */}
-          <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 mb-6">
-            <h3 className="font-semibold text-slate-900 mb-4">
+          <div className="glass-soft border border-card-border rounded-2xl p-4 mb-6">
+            <h3 className="font-semibold text-foreground mb-4">
               Back this dish
             </h3>
 
             {/* USDC Balance */}
             {isConnected && (
-              <p className="text-sm text-slate-500 mb-3">
+              <p className="text-sm text-primary-text opacity-70 mb-3">
                 Your USDC Balance:{" "}
-                <span className="font-medium text-slate-700">
+                <span className="font-medium text-foreground">
                   ${userBalance.toFixed(2)}
                 </span>
               </p>
@@ -1107,38 +1132,38 @@ export default function DishPage() {
               <button
                 onClick={() => setBackAmount(Math.max(1, backAmount - 1))}
                 disabled={isMinting}
-                className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors disabled:opacity-50"
+                className="w-11 h-11 rounded-full glass flex items-center justify-center hover:glass-strong transition-colors disabled:opacity-50"
               >
-                <span className="text-xl text-slate-600">−</span>
+                <span className="text-xl text-foreground">−</span>
               </button>
               <div className="flex-1 text-center">
-                <p className="text-3xl font-bold text-slate-900">
+                <p className="text-3xl font-bold text-foreground">
                   {backAmount}
                 </p>
-                <p className="text-sm text-slate-500">Stamps</p>
+                <p className="text-sm text-primary-text opacity-70">Stamps</p>
               </div>
               <button
                 onClick={() => setBackAmount(backAmount + 1)}
                 disabled={isMinting}
-                className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors disabled:opacity-50"
+                className="w-11 h-11 rounded-full glass flex items-center justify-center hover:glass-strong transition-colors disabled:opacity-50"
               >
-                <span className="text-xl text-slate-600">+</span>
+                <span className="text-xl text-foreground">+</span>
               </button>
             </div>
 
             {/* Mint Error */}
             {mintError && (
-              <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 mb-4">
-                <p className="text-sm text-rose-600">{mintError}</p>
+              <div className="glass-soft border border-primary-dark/30 rounded-xl p-3 mb-4">
+                <p className="text-sm text-foreground">{mintError}</p>
               </div>
             )}
 
             {/* Success Message */}
             {mintStep === "complete" && (
-              <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 mb-4">
+              <div className="glass-primary border border-primary-dark/30 rounded-xl p-3 mb-4">
                 <div className="flex items-center gap-2">
                   <svg
-                    className="w-4 h-4 text-emerald-500"
+                    className="w-4 h-4 text-primary-dark"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -1150,7 +1175,7 @@ export default function DishPage() {
                       d="M5 13l4 4L19 7"
                     />
                   </svg>
-                  <p className="text-sm text-emerald-700">
+                  <p className="text-sm text-primary-dark">
                     Successfully minted! Refreshing...
                   </p>
                 </div>
@@ -1159,10 +1184,10 @@ export default function DishPage() {
 
             {/* Minting Progress */}
             {isMinting && (
-              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 mb-4">
+              <div className="glass-primary border border-primary-dark/30 rounded-xl p-3 mb-4">
                 <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
-                  <p className="text-sm text-indigo-700">
+                  <div className="w-4 h-4 border-2 border-primary-dark/30 border-t-primary-dark rounded-full animate-spin" />
+                  <p className="text-sm text-primary-dark">
                     {mintStep === "checking" && "Preparing transaction..."}
                     {mintStep === "approving" && "Approving USDC..."}
                     {mintStep === "minting" && "Minting tokens..."}
@@ -1181,7 +1206,7 @@ export default function DishPage() {
               )}
               {!isConnected ? "Connect Wallet to Mint" : getButtonText()}
             </button>
-            <p className="text-center text-xs text-slate-500 mt-2">
+            <p className="text-center text-xs text-primary-text opacity-70 mt-2">
               Max $10 per dish
             </p>
           </div>

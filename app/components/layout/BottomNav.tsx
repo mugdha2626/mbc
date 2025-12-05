@@ -12,14 +12,14 @@ export function BottomNav() {
   const isProfile = pathname === "/profile" || pathname === "/portfolio";
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-50 safe-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-card-border z-50 safe-bottom shadow-lg shadow-black/5">
       <div className="max-w-lg mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           {/* Discover */}
           <Link
             href="/"
-            className={`flex flex-col items-center gap-1 min-w-[44px] ${
-              isDiscover ? "text-primary-dark" : "text-gray-400"
+            className={`flex flex-col items-center gap-1 min-w-[44px] transition-colors ${
+              isDiscover ? "text-primary-dark" : "text-muted"
             }`}
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={isDiscover ? 2.5 : 2}>
@@ -31,8 +31,8 @@ export function BottomNav() {
           {/* Trending */}
           <Link
             href="/trending"
-            className={`flex flex-col items-center gap-1 min-w-[44px] ${
-              isTrending ? "text-primary-dark" : "text-gray-400"
+            className={`flex flex-col items-center gap-1 min-w-[44px] transition-colors ${
+              isTrending ? "text-primary-dark" : "text-muted"
             }`}
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={isTrending ? 2.5 : 2}>
@@ -46,19 +46,19 @@ export function BottomNav() {
             href="/create"
             className="relative -mt-8"
           >
-            <div className="w-14 h-14 btn-primary rounded-full flex items-center justify-center shadow-lg shadow-[var(--primary-dark)]/30">
+            <div className="w-14 h-14 btn-primary rounded-full flex items-center justify-center shadow-lg shadow-[var(--primary-dark)]/40 backdrop-blur-md">
               <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
             </div>
-            <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-medium text-gray-500">Create</span>
+            <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-medium text-primary-text">Create</span>
           </Link>
 
           {/* Rewards */}
           <Link
             href="/rewards"
-            className={`flex flex-col items-center gap-1 min-w-[44px] ${
-              isRewards ? "text-primary-dark" : "text-gray-400"
+            className={`flex flex-col items-center gap-1 min-w-[44px] transition-colors ${
+              isRewards ? "text-primary-dark" : "text-muted"
             }`}
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={isRewards ? 2.5 : 2}>
@@ -70,8 +70,8 @@ export function BottomNav() {
           {/* You */}
           <Link
             href="/profile"
-            className={`flex flex-col items-center gap-1 min-w-[44px] ${
-              isProfile ? "text-primary-dark" : "text-gray-400"
+            className={`flex flex-col items-center gap-1 min-w-[44px] transition-colors ${
+              isProfile ? "text-primary-dark" : "text-muted"
             }`}
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={isProfile ? 2.5 : 2}>

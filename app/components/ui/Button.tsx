@@ -20,11 +20,11 @@ export function Button({
 
   const variants = {
     primary: "btn-primary",
-    secondary: "bg-gray-200 hover:bg-gray-300 text-gray-800",
+    secondary: "glass-soft hover:glass text-primary-text border-card-border",
     outline:
-      "bg-transparent border-2 border-gray-300 hover:border-gray-400 text-gray-700",
+      "bg-transparent border-2 border-card-border hover:border-primary text-primary-text",
     danger:
-      "bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30",
+      "glass-primary hover:glass-strong text-primary-dark border border-primary-dark/30",
   };
 
   const sizes = {

@@ -91,15 +91,15 @@ export default function RestaurantPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 pb-24">
+      <div className="min-h-screen bg-gradient-pink pb-24">
         <div className="animate-pulse">
-          <div className="h-56 bg-gray-200" />
-          <div className="bg-white rounded-t-3xl -mt-4 relative p-4">
-            <div className="h-6 bg-gray-200 rounded w-3/4 mb-4" />
-            <div className="h-4 bg-gray-200 rounded w-1/2 mb-6" />
+          <div className="h-56 glass-soft" />
+          <div className="glass rounded-t-3xl -mt-4 relative p-4">
+            <div className="h-6 glass-soft rounded w-3/4 mb-4" />
+            <div className="h-4 glass-soft rounded w-1/2 mb-6" />
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-32 bg-gray-200 rounded-2xl" />
+                <div key={i} className="h-32 glass-soft rounded-2xl" />
               ))}
             </div>
           </div>
@@ -111,9 +111,9 @@ export default function RestaurantPage() {
 
   if (error || !restaurant) {
     return (
-      <div className="min-h-screen bg-gray-50 pb-24 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-500 mb-4">{error || "Restaurant not found"}</p>
+      <div className="min-h-screen bg-gradient-pink pb-24 flex items-center justify-center">
+        <div className="text-center glass rounded-xl p-6 card-shadow">
+          <p className="text-foreground mb-4">{error || "Restaurant not found"}</p>
           <button
             onClick={() => router.back()}
             className="text-primary-dark font-medium hover:underline"
@@ -127,7 +127,7 @@ export default function RestaurantPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-screen bg-gradient-pink pb-24">
       {/* Hero Image */}
       <div className="relative h-56">
         <img
@@ -140,16 +140,16 @@ export default function RestaurantPage() {
         {/* Back button */}
         <button
           onClick={() => router.back()}
-          className="absolute top-4 left-4 p-2 rounded-full bg-white/90 backdrop-blur-sm hover:bg-white transition-colors shadow-sm"
+          className="absolute top-4 left-4 p-2 rounded-full glass-strong hover:glass transition-colors card-shadow"
         >
-          <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
 
         {/* Share button */}
-        <button className="absolute top-4 right-4 p-2 rounded-full bg-white/90 backdrop-blur-sm hover:bg-white transition-colors shadow-sm">
-          <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <button className="absolute top-4 right-4 p-2 rounded-full glass-strong hover:glass transition-colors card-shadow">
+          <svg className="w-5 h-5 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
           </svg>
         </button>
@@ -215,22 +215,22 @@ export default function RestaurantPage() {
       </div>
 
       {/* Content */}
-      <div className="bg-white rounded-t-3xl -mt-4 relative">
+      <div className="glass rounded-t-3xl -mt-4 relative">
         <div className="px-4 py-6">
           {/* Address */}
           <a
             href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(restaurant.name)}&query_place_id=${restaurant.id}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 text-sm text-gray-500 mb-6 hover:text-primary-dark transition-colors group"
+            className="flex items-center gap-2 text-sm text-primary-text mb-6 hover:text-primary-dark transition-colors group"
           >
             <svg className="w-4 h-4 text-primary-dark group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
             </svg>
-            <span className="underline decoration-dotted decoration-gray-300 underline-offset-2 group-hover:decoration-primary-dark">
+            <span className="underline decoration-dotted decoration-card-border underline-offset-2 group-hover:decoration-primary-dark">
               {restaurant.address || "Address not available"}
             </span>
-            <svg className="w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3 h-3 text-primary-text opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
             </svg>
           </a>
@@ -238,7 +238,7 @@ export default function RestaurantPage() {
           {/* Search Bar */}
           <div className="relative mb-5">
             <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-primary-text opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
@@ -247,12 +247,12 @@ export default function RestaurantPage() {
               placeholder="Search dishes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+              className="w-full pl-10 pr-4 py-2.5 glass rounded-xl text-sm text-foreground placeholder-primary-text focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600"
+                className="absolute inset-y-0 right-3 flex items-center text-primary-text opacity-70 hover:opacity-100"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -263,10 +263,10 @@ export default function RestaurantPage() {
 
           {/* Top Dishes Header */}
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-lg font-semibold text-foreground">
               Top Dishes {restaurant.dishes.length > 0 && `(${restaurant.dishes.length})`}
             </h2>
-            <button className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700">
+            <button className="flex items-center gap-1.5 text-sm text-primary-text hover:text-foreground">
               Sort by
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -283,8 +283,8 @@ export default function RestaurantPage() {
             if (restaurant.dishes.length === 0) {
               return (
                 <div className="text-center py-8">
-                  <p className="text-gray-500">No dishes yet</p>
-                  <p className="text-sm text-gray-400 mt-1">Be the first to mint a dish here!</p>
+                  <p className="text-foreground">No dishes yet</p>
+                  <p className="text-sm text-primary-text opacity-70 mt-1">Be the first to mint a dish here!</p>
                 </div>
               );
             }
@@ -292,8 +292,8 @@ export default function RestaurantPage() {
             if (filteredDishes.length === 0) {
               return (
                 <div className="text-center py-8">
-                  <p className="text-gray-500">No dishes found</p>
-                  <p className="text-sm text-gray-400 mt-1">Try a different search term</p>
+                  <p className="text-foreground">No dishes found</p>
+                  <p className="text-sm text-primary-text opacity-70 mt-1">Try a different search term</p>
                 </div>
               );
             }

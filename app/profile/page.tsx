@@ -75,15 +75,23 @@ export default function ProfilePage() {
     username?: string;
     pfpUrl?: string;
   } | null>(null);
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [backedRestaurants, setBackedRestaurants] = useState<MapRestaurant[]>([]);
+  const [userLocation, setUserLocation] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+  const [backedRestaurants, setBackedRestaurants] = useState<MapRestaurant[]>(
+    []
+  );
   const [availableCities, setAvailableCities] = useState<string[]>([]);
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [showCityPicker, setShowCityPicker] = useState(false);
-  const [currentLocationCity, setCurrentLocationCity] = useState<string>("Loading...");
+  const [currentLocationCity, setCurrentLocationCity] =
+    useState<string>("Loading...");
   const [wishlistCount, setWishlistCount] = useState<number>(0);
   const [holdings, setHoldings] = useState<HoldingWithDetails[]>([]);
-  const [createdDishes, setCreatedDishes] = useState<CreatedDishWithReferrals[]>([]);
+  const [createdDishes, setCreatedDishes] = useState<
+    CreatedDishWithReferrals[]
+  >([]);
   const [showReputationTooltip, setShowReputationTooltip] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
@@ -138,47 +146,64 @@ export default function ProfilePage() {
 
           if (portfolio?.dishes) {
             console.log("Portfolio dishes:", portfolio.dishes);
-            const holdingsPromises = portfolio.dishes.map(async (item: { dish: string; quantity: number; return: number; referredBy?: number | null; referredTo?: number[] }) => {
-              try {
-                const dishRes = await fetch(`/api/dish/${item.dish}`);
-                if (!dishRes.ok) return null;
-                const dishData = await dishRes.json();
-                const dish = dishData.dish;
+            const holdingsPromises = portfolio.dishes.map(
+              async (item: {
+                dish: string;
+                quantity: number;
+                return: number;
+                referredBy?: number | null;
+                referredTo?: number[];
+              }) => {
+                try {
+                  const dishRes = await fetch(`/api/dish/${item.dish}`);
+                  if (!dishRes.ok) return null;
+                  const dishData = await dishRes.json();
+                  const dish = dishData.dish;
 
-                // Fetch referrer username if exists
-                let referredByInfo = null;
-                if (item.referredBy) {
-                  try {
-                    const referrerRes = await fetch(`/api/users/${item.referredBy}`);
-                    if (referrerRes.ok) {
-                      const referrerData = await referrerRes.json();
+                  // Fetch referrer username if exists
+                  let referredByInfo = null;
+                  if (item.referredBy) {
+                    try {
+                      const referrerRes = await fetch(
+                        `/api/users/${item.referredBy}`
+                      );
+                      if (referrerRes.ok) {
+                        const referrerData = await referrerRes.json();
+                        referredByInfo = {
+                          fid: item.referredBy,
+                          username:
+                            referrerData.user?.username ||
+                            `User #${item.referredBy}`,
+                        };
+                      }
+                    } catch {
                       referredByInfo = {
                         fid: item.referredBy,
-                        username: referrerData.user?.username || `User #${item.referredBy}`,
+                        username: `User #${item.referredBy}`,
                       };
                     }
-                  } catch {
-                    referredByInfo = { fid: item.referredBy, username: `User #${item.referredBy}` };
                   }
+
+                  return {
+                    dishId: item.dish,
+                    name: dish?.name || "Unknown Dish",
+                    image: dish?.image,
+                    quantity: item.quantity,
+                    currentPrice: dish?.currentPrice || 0,
+                    totalValue: (dish?.currentPrice || 0) * item.quantity,
+                    returnValue: item.return || 0,
+                    restaurantName: dish?.restaurantName,
+                    referredBy: referredByInfo,
+                  };
+                } catch {
+                  return null;
                 }
-
-                return {
-                  dishId: item.dish,
-                  name: dish?.name || "Unknown Dish",
-                  image: dish?.image,
-                  quantity: item.quantity,
-                  currentPrice: dish?.currentPrice || 0,
-                  totalValue: (dish?.currentPrice || 0) * item.quantity,
-                  returnValue: item.return || 0,
-                  restaurantName: dish?.restaurantName,
-                  referredBy: referredByInfo,
-                };
-              } catch {
-                return null;
               }
-            });
+            );
 
-            const holdingsResults = (await Promise.all(holdingsPromises)).filter(Boolean) as HoldingWithDetails[];
+            const holdingsResults = (
+              await Promise.all(holdingsPromises)
+            ).filter(Boolean) as HoldingWithDetails[];
             console.log("Holdings with details:", holdingsResults);
             setHoldings(holdingsResults);
 
@@ -189,53 +214,68 @@ export default function ProfilePage() {
 
               // Build map of referredTo from portfolio
               const referredToMap = new Map<string, number[]>();
-              portfolio.dishes.forEach((item: { dish: string; referredTo?: number[] }) => {
-                if (item.referredTo && item.referredTo.length > 0) {
-                  referredToMap.set(item.dish, item.referredTo);
-                }
-              });
-
-              const createdDishesPromises = (createdData.dishes || []).map(async (dish: {
-                dishId: string;
-                name: string;
-                image?: string;
-                currentPrice?: number;
-                currentSupply?: number;
-                totalHolders?: number;
-                restaurantName?: string;
-              }) => {
-                const referredToFids = referredToMap.get(dish.dishId) || [];
-
-                // Fetch usernames for referredTo
-                const referredToPromises = referredToFids.map(async (refFid: number) => {
-                  try {
-                    const userRes3 = await fetch(`/api/users/${refFid}`);
-                    if (userRes3.ok) {
-                      const userData3 = await userRes3.json();
-                      return { fid: refFid, username: userData3.user?.username || `User #${refFid}` };
-                    }
-                  } catch {
-                    // ignore
+              portfolio.dishes.forEach(
+                (item: { dish: string; referredTo?: number[] }) => {
+                  if (item.referredTo && item.referredTo.length > 0) {
+                    referredToMap.set(item.dish, item.referredTo);
                   }
-                  return { fid: refFid, username: `User #${refFid}` };
-                });
+                }
+              );
 
-                const referredTo = await Promise.all(referredToPromises);
+              const createdDishesPromises = (createdData.dishes || []).map(
+                async (dish: {
+                  dishId: string;
+                  name: string;
+                  image?: string;
+                  currentPrice?: number;
+                  currentSupply?: number;
+                  totalHolders?: number;
+                  restaurantName?: string;
+                }) => {
+                  const referredToFids = referredToMap.get(dish.dishId) || [];
 
-                return {
-                  dishId: dish.dishId,
-                  name: dish.name,
-                  image: dish.image,
-                  currentPrice: dish.currentPrice || 0,
-                  currentSupply: dish.currentSupply || 0,
-                  totalHolders: dish.totalHolders || 0,
-                  restaurantName: dish.restaurantName,
-                  referredTo,
-                };
-              });
+                  // Fetch usernames for referredTo
+                  const referredToPromises = referredToFids.map(
+                    async (refFid: number) => {
+                      try {
+                        const userRes3 = await fetch(`/api/users/${refFid}`);
+                        if (userRes3.ok) {
+                          const userData3 = await userRes3.json();
+                          return {
+                            fid: refFid,
+                            username:
+                              userData3.user?.username || `User #${refFid}`,
+                          };
+                        }
+                      } catch {
+                        // ignore
+                      }
+                      return { fid: refFid, username: `User #${refFid}` };
+                    }
+                  );
 
-              const createdDishesResults = await Promise.all(createdDishesPromises);
-              console.log("Created dishes with referrals:", createdDishesResults);
+                  const referredTo = await Promise.all(referredToPromises);
+
+                  return {
+                    dishId: dish.dishId,
+                    name: dish.name,
+                    image: dish.image,
+                    currentPrice: dish.currentPrice || 0,
+                    currentSupply: dish.currentSupply || 0,
+                    totalHolders: dish.totalHolders || 0,
+                    restaurantName: dish.restaurantName,
+                    referredTo,
+                  };
+                }
+              );
+
+              const createdDishesResults = await Promise.all(
+                createdDishesPromises
+              );
+              console.log(
+                "Created dishes with referrals:",
+                createdDishesResults
+              );
               setCreatedDishes(createdDishesResults);
             }
           }
@@ -270,7 +310,9 @@ export default function ProfilePage() {
             const city = data.results[0].address_components?.find(
               (c: { types: string[] }) => c.types.includes("locality")
             )?.long_name;
-            setCurrentLocationCity(city || data.results[0].formatted_address.split(",")[0]);
+            setCurrentLocationCity(
+              city || data.results[0].formatted_address.split(",")[0]
+            );
           } else {
             setCurrentLocationCity("Your Location");
           }
@@ -286,14 +328,17 @@ export default function ProfilePage() {
   // Filter restaurants by selected city
   const filteredRestaurants = useMemo(() => {
     if (!selectedCity) return backedRestaurants;
-    return backedRestaurants.filter(r => r.city === selectedCity);
+    return backedRestaurants.filter((r) => r.city === selectedCity);
   }, [backedRestaurants, selectedCity]);
 
   // Get map center based on selected city's restaurants or user location
   const mapCenter = useMemo(() => {
     if (selectedCity && filteredRestaurants.length > 0) {
       // Center on the first restaurant in the selected city
-      return { lat: filteredRestaurants[0].lat, lng: filteredRestaurants[0].lng };
+      return {
+        lat: filteredRestaurants[0].lat,
+        lng: filteredRestaurants[0].lng,
+      };
     }
     return userLocation;
   }, [selectedCity, filteredRestaurants, userLocation]);
@@ -307,16 +352,25 @@ export default function ProfilePage() {
   }, [holdings]);
 
   // Calculate return percentage based on calculated value vs invested
-  const returnPercentage = user?.portfolio.totalInvested && user.portfolio.totalInvested > 0
-    ? (((calculatedPortfolioValue - user.portfolio.totalInvested) / user.portfolio.totalInvested) * 100).toFixed(1)
-    : "0";
+  const returnPercentage =
+    user?.portfolio.totalInvested && user.portfolio.totalInvested > 0
+      ? (
+          ((calculatedPortfolioValue - user.portfolio.totalInvested) /
+            user.portfolio.totalInvested) *
+          100
+        ).toFixed(1)
+      : "0";
 
-  const totalReturn = calculatedPortfolioValue - (user?.portfolio.totalInvested || 0);
+  const totalReturn =
+    calculatedPortfolioValue - (user?.portfolio.totalInvested || 0);
 
   // Close tooltip when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (tooltipRef.current && !tooltipRef.current.contains(event.target as Node)) {
+      if (
+        tooltipRef.current &&
+        !tooltipRef.current.contains(event.target as Node)
+      ) {
         setShowReputationTooltip(false);
       }
     };
@@ -353,8 +407,18 @@ export default function ProfilePage() {
               />
             ) : (
               <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center">
-                <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                <svg
+                  className="w-10 h-10 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                  />
                 </svg>
               </div>
             )}
@@ -370,7 +434,9 @@ export default function ProfilePage() {
                   user.badges.map((badge, index) => (
                     <span
                       key={index}
-                      className={`badge ${index === 0 ? "badge-yellow" : "badge-gray"}`}
+                      className={`badge ${
+                        index === 0 ? "badge-yellow" : "badge-gray"
+                      }`}
                     >
                       {badge}
                     </span>
@@ -382,9 +448,24 @@ export default function ProfilePage() {
             </div>
           </div>
           <button className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors">
-            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <svg
+              className="w-5 h-5 text-gray-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+              />
             </svg>
           </button>
         </div>
@@ -393,8 +474,18 @@ export default function ProfilePage() {
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-gray-50 rounded-2xl p-4">
             <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                />
               </svg>
               PORTFOLIO VALUE
             </div>
@@ -402,32 +493,77 @@ export default function ProfilePage() {
               {formatCurrency(calculatedPortfolioValue)}
             </p>
             {holdings.length > 0 && (
-              <p className={`text-sm flex items-center gap-1 ${totalReturn >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <p
+                className={`text-sm flex items-center gap-1 ${
+                  totalReturn >= 0 ? "text-green-600" : "text-red-600"
+                }`}
+              >
                 {totalReturn >= 0 ? (
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 17l5-5 5 5" />
+                  <svg
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M7 17l5-5 5 5"
+                    />
                   </svg>
                 ) : (
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 7l-5 5-5-5" />
+                  <svg
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 7l-5 5-5-5"
+                    />
                   </svg>
                 )}
-                {totalReturn >= 0 ? '+' : ''}{returnPercentage}% return
+                {totalReturn >= 0 ? "+" : ""}
+                {returnPercentage}% return
               </p>
             )}
           </div>
           <div className="bg-gray-50 rounded-2xl p-4 relative" ref={tooltipRef}>
             <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
+                />
               </svg>
               REPUTATION
               <button
                 onClick={() => setShowReputationTooltip(!showReputationTooltip)}
                 className="ml-auto p-0.5 rounded-full hover:bg-gray-200 transition-colors"
               >
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <svg
+                  className="w-4 h-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
                 </svg>
               </button>
             </div>
@@ -443,13 +579,26 @@ export default function ProfilePage() {
               <div className="absolute top-full left-0 right-0 mt-2 z-20">
                 <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-4 text-left">
                   <div className="flex items-center gap-2 mb-2">
-                    <svg className="w-4 h-4 text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                    <svg
+                      className="w-4 h-4 text-primary-dark"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
+                      />
                     </svg>
-                    <span className="font-semibold text-gray-900 text-sm">Reputation Score</span>
+                    <span className="font-semibold text-gray-900 text-sm">
+                      Reputation Score
+                    </span>
                   </div>
                   <p className="text-xs text-gray-600 mb-3">
-                    Your reputation reflects your impact on the tmap community. Earn points by:
+                    Your reputation reflects your impact on the tmap community.
+                    Earn points by:
                   </p>
                   <div className="space-y-1.5 text-xs">
                     <div className="flex items-center gap-2 text-gray-600">
@@ -471,7 +620,8 @@ export default function ProfilePage() {
                   </div>
                   <div className="mt-3 pt-3 border-t border-gray-100">
                     <p className="text-xs text-gray-500">
-                      Higher reputation unlocks badges and increases your visibility.
+                      Higher reputation unlocks badges and increases your
+                      visibility.
                     </p>
                   </div>
                 </div>
@@ -484,8 +634,18 @@ export default function ProfilePage() {
         <div className="grid grid-cols-2 gap-3 mt-3">
           <div className="bg-gray-50 rounded-2xl p-4">
             <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
               </svg>
               TOTAL INVESTED
             </div>
@@ -495,8 +655,18 @@ export default function ProfilePage() {
           </div>
           <div className="bg-gray-50 rounded-2xl p-4">
             <div className="flex items-center gap-2 text-gray-500 text-sm mb-1">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                />
               </svg>
               STAMPS
             </div>
@@ -516,28 +686,46 @@ export default function ProfilePage() {
           <div className="flex items-center gap-4">
             <div className="relative">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center text-red-400 group-hover:from-red-100 group-hover:to-red-200 group-hover:text-red-500 transition-all">
-                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                <svg
+                  className="w-6 h-6"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
                   <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                 </svg>
               </div>
               {wishlistCount > 0 && (
                 <div className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1.5 shadow-sm">
-                  {wishlistCount > 99 ? '99+' : wishlistCount}
+                  {wishlistCount > 99 ? "99+" : wishlistCount}
                 </div>
               )}
             </div>
             <div>
-              <p className="font-semibold text-gray-900 group-hover:text-primary-dark transition-colors">My Wishlist</p>
+              <p className="font-semibold text-gray-900 group-hover:text-primary-dark transition-colors">
+                My Wishlist
+              </p>
               <p className="text-sm text-gray-500">
                 {wishlistCount === 0
                   ? "Save dishes you want to try"
-                  : `${wishlistCount} saved ${wishlistCount === 1 ? 'dish' : 'dishes'}`}
+                  : `${wishlistCount} saved ${
+                      wishlistCount === 1 ? "dish" : "dishes"
+                    }`}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <svg className="w-5 h-5 text-gray-300 group-hover:text-primary-dark group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            <svg
+              className="w-5 h-5 text-gray-300 group-hover:text-primary-dark group-hover:translate-x-1 transition-all"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 5l7 7-7 7"
+              />
             </svg>
           </div>
         </Link>
@@ -547,13 +735,26 @@ export default function ProfilePage() {
       <div className="px-4 py-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <svg className="w-5 h-5 text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+            <svg
+              className="w-5 h-5 text-primary-dark"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+              />
             </svg>
-            <h2 className="text-lg font-semibold text-gray-900">Your Taste Map</h2>
+            <h2 className="text-lg font-semibold text-gray-900">
+              Your Taste Map
+            </h2>
           </div>
           <span className="text-sm font-medium text-primary-dark">
-            {filteredRestaurants.length} {filteredRestaurants.length === 1 ? "Spot" : "Spots"}
+            {filteredRestaurants.length}{" "}
+            {filteredRestaurants.length === 1 ? "Spot" : "Spots"}
           </span>
         </div>
 
@@ -574,14 +775,41 @@ export default function ProfilePage() {
               onClick={() => setShowCityPicker(!showCityPicker)}
               className="bg-white/90 backdrop-blur-sm rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 flex items-center gap-1.5 hover:bg-white transition-colors shadow-sm"
             >
-              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              <svg
+                className="w-4 h-4 text-gray-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                />
               </svg>
               {displayLocation}
               {availableCities.length > 0 && (
-                <svg className={`w-4 h-4 text-gray-400 transition-transform ${showCityPicker ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <svg
+                  className={`w-4 h-4 text-gray-400 transition-transform ${
+                    showCityPicker ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
                 </svg>
               )}
             </button>
@@ -594,15 +822,39 @@ export default function ProfilePage() {
                     setSelectedCity(null);
                     setShowCityPicker(false);
                   }}
-                  className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${!selectedCity ? 'text-primary-dark font-medium' : 'text-gray-700'}`}
+                  className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
+                    !selectedCity
+                      ? "text-primary-dark font-medium"
+                      : "text-gray-700"
+                  }`}
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"
+                    />
                   </svg>
                   Current Location
                   {!selectedCity && (
-                    <svg className="w-4 h-4 ml-auto text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    <svg
+                      className="w-4 h-4 ml-auto text-primary-dark"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
                     </svg>
                   )}
                 </button>
@@ -614,12 +866,26 @@ export default function ProfilePage() {
                       setSelectedCity(city);
                       setShowCityPicker(false);
                     }}
-                    className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${selectedCity === city ? 'text-primary-dark font-medium' : 'text-gray-700'}`}
+                    className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
+                      selectedCity === city
+                        ? "text-primary-dark font-medium"
+                        : "text-gray-700"
+                    }`}
                   >
                     {city}
                     {selectedCity === city && (
-                      <svg className="w-4 h-4 text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      <svg
+                        className="w-4 h-4 text-primary-dark"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
                       </svg>
                     )}
                   </button>
@@ -632,7 +898,9 @@ export default function ProfilePage() {
 
       {/* Your Holdings Section */}
       <div className="px-4">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Stamps</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          Your Stamps
+        </h2>
 
         {holdings.length > 0 ? (
           <div className="space-y-3">
@@ -644,32 +912,60 @@ export default function ProfilePage() {
               >
                 <div className="flex gap-3">
                   <img
-                    src={holding.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"}
+                    src={
+                      holding.image ||
+                      "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"
+                    }
                     alt={holding.name}
                     className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between">
                       <div className="min-w-0">
-                        <p className="font-medium text-gray-900 truncate">{holding.name}</p>
-                        <p className="text-sm text-gray-500">{holding.quantity} Stamps</p>
+                        <p className="font-medium text-gray-900 truncate">
+                          {holding.name}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {holding.quantity} Stamps
+                        </p>
                       </div>
                       <div className="text-right flex-shrink-0 ml-2">
-                        <p className="font-semibold text-gray-900">${holding.totalValue.toFixed(2)}</p>
-                        <p className={`text-sm ${holding.returnValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {holding.returnValue >= 0 ? '+' : ''}{formatCurrency(holding.returnValue)}
+                        <p className="font-semibold text-gray-900">
+                          ${holding.totalValue.toFixed(2)}
+                        </p>
+                        <p
+                          className={`text-sm ${
+                            holding.returnValue >= 0
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {holding.returnValue >= 0 ? "+" : ""}
+                          {formatCurrency(holding.returnValue)}
                         </p>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-gray-500">
                       <span>${holding.currentPrice.toFixed(2)} each</span>
-                      {holding.restaurantName && <span>{holding.restaurantName}</span>}
+                      {holding.restaurantName && (
+                        <span>{holding.restaurantName}</span>
+                      )}
                     </div>
                     {holding.referredBy && (
                       <div className="mt-2">
                         <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-purple-50 text-purple-700 text-xs font-medium rounded-full">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          <svg
+                            className="w-3 h-3"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                            />
                           </svg>
                           via @{holding.referredBy.username}
                         </span>
@@ -683,8 +979,18 @@ export default function ProfilePage() {
         ) : (
           <div className="bg-white rounded-2xl p-8 border border-gray-100 text-center">
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              <svg
+                className="w-8 h-8 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                />
               </svg>
             </div>
             <p className="text-gray-500 mb-4">No Stamps yet</p>
@@ -700,7 +1006,9 @@ export default function ProfilePage() {
 
       {/* Stamps You Created Section */}
       <div className="px-4 mt-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Stamps You Created</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          Stamps You Created
+        </h2>
         {createdDishes.length > 0 ? (
           <div className="space-y-3">
             {createdDishes.map((dish) => (
@@ -712,22 +1020,33 @@ export default function ProfilePage() {
                 <div className="flex gap-3">
                   <div className="relative flex-shrink-0">
                     <img
-                      src={dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"}
+                      src={
+                        dish.image ||
+                        "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"
+                      }
                       alt={dish.name}
                       className="w-14 h-14 rounded-xl object-cover"
                     />
                     <div className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center">
-                      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 1L9 9l-8 2 6 5-2 8 7-4 7 4-2-8 6-5-8-2-3-8z"/>
+                      <svg
+                        className="w-3 h-3 text-white"
+                        fill="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M12 1L9 9l-8 2 6 5-2 8 7-4 7 4-2-8 6-5-8-2-3-8z" />
                       </svg>
                     </div>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between">
                       <div className="min-w-0">
-                        <p className="font-medium text-gray-900 truncate">{dish.name}</p>
+                        <p className="font-medium text-gray-900 truncate">
+                          {dish.name}
+                        </p>
                         {dish.restaurantName && (
-                          <p className="text-xs text-gray-500 truncate">{dish.restaurantName}</p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {dish.restaurantName}
+                          </p>
                         )}
                       </div>
                       <p className="font-semibold text-green-600 flex-shrink-0 ml-2">
@@ -741,13 +1060,26 @@ export default function ProfilePage() {
                     {dish.referredTo.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 text-xs font-medium rounded-full">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          <svg
+                            className="w-3 h-3"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
                           </svg>
                           +2.5% earned
                         </span>
-                        {dish.referredTo.map(u => (
-                          <span key={u.fid} className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                        {dish.referredTo.map((u) => (
+                          <span
+                            key={u.fid}
+                            className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full"
+                          >
                             @{u.username}
                           </span>
                         ))}
@@ -761,11 +1093,23 @@ export default function ProfilePage() {
         ) : (
           <div className="bg-white rounded-2xl p-8 border border-gray-100 text-center">
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              <svg
+                className="w-8 h-8 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                />
               </svg>
             </div>
-            <p className="text-gray-500 mb-4">You haven&apos;t created any stamps yet</p>
+            <p className="text-gray-500 mb-4">
+              You haven&apos;t created any stamps yet
+            </p>
             <Link
               href="/create"
               className="inline-block btn-primary px-6 py-2 rounded-xl text-sm font-medium"

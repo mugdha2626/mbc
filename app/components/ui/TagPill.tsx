@@ -7,14 +7,16 @@ interface TagPillProps {
 
 export function TagPill({ label, variant = "default" }: TagPillProps) {
   const variants = {
-    default: "bg-gray-100 text-gray-600 border-gray-200",
-    success: "bg-green-50 text-green-600 border-green-200",
-    warning: "bg-orange-50 text-orange-600 border-orange-200",
-    info: "bg-primary-softer text-primary border-primary",
+    default: "glass-soft text-primary-text border-card-border",
+    success: "glass-mint text-[#5a9a8a] border-[rgba(192,232,216,0.4)]",
+    warning: "glass-peach text-[#8b6a5a] border-[rgba(240,200,184,0.4)]",
+    info: "glass-primary text-primary-dark border-[rgba(184,168,216,0.4)]",
   };
 
   return (
-    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium border ${variants[variant]}`}>
+    <span
+      className={`inline-flex px-3 py-1 rounded-full text-xs font-medium border ${variants[variant]}`}
+    >
       {label}
     </span>
   );

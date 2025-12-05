@@ -35,7 +35,7 @@ export function DishCard({
 
   return (
     <Link href={`/dish/${id}`}>
-      <div className="bg-white border border-gray-100 rounded-2xl p-4 hover:border-gray-200 transition-all shadow-sm relative group">
+      <div className="glass rounded-2xl p-4 hover:glass-strong transition-all card-shadow relative group">
         <div className="flex gap-4">
           {/* Image */}
           <div className="flex-shrink-0">
@@ -57,9 +57,9 @@ export function DishCard({
               ${price.toFixed(2)}
             </p>
 
-            <div className="flex items-center gap-3 text-xs text-gray-500">
-              <span>MC: {marketCap}</span>
-              <span>Vol: {volume}</span>
+            <div className="flex items-center gap-3 text-xs text-primary-text">
+              <span className="glass-soft px-2 py-1 rounded-full">MC: {marketCap}</span>
+              <span className="glass-soft px-2 py-1 rounded-full">Vol: {volume}</span>
             </div>
 
             <div className="flex items-center justify-between mt-2">
@@ -67,7 +67,7 @@ export function DishCard({
               <div className="flex gap-2">
                 <button
                   onClick={handleWishlist}
-                  className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                  className="p-1.5 text-primary-text hover:text-primary-dark hover:glass-primary rounded-full transition-colors"
                 >
                   <svg
                     className="w-5 h-5"

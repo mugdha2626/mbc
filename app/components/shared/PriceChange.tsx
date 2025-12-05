@@ -16,7 +16,7 @@ export function PriceChange({ value, showIcon = true, size = "md" }: PriceChange
   };
 
   return (
-    <span className={`inline-flex items-center gap-1 font-medium ${sizeClasses[size]} ${isPositive ? "text-green-400" : "text-red-400"}`}>
+    <span className={`inline-flex items-center gap-1 font-medium ${sizeClasses[size]} ${isPositive ? "text-[var(--accent-mint)]" : "text-primary-dark"}`}>
       {showIcon && (
         <span>{isPositive ? "↑" : "↓"}</span>
       )}

@@ -197,18 +197,18 @@ export default function TrendingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-gray-900 pb-24">
+    <div className="min-h-screen bg-gradient-pink text-foreground pb-24">
       <Header title="Trending" />
 
       {/* Tab Switcher */}
-      <div className="px-4 py-4">
-        <div className="flex bg-gray-100 rounded-xl p-1">
+      <div className="px-4 py-3">
+        <div className="flex glass rounded-xl p-1">
           <button
             onClick={() => setActiveTab("dishes")}
-            className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
               activeTab === "dishes"
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
+                ? "glass-strong text-foreground card-shadow"
+                : "text-primary-text hover:text-foreground"
             }`}
           >
             <div className="flex items-center justify-center gap-2">
@@ -220,10 +220,10 @@ export default function TrendingPage() {
           </button>
           <button
             onClick={() => setActiveTab("users")}
-            className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
               activeTab === "users"
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
+                ? "glass-strong text-foreground card-shadow"
+                : "text-primary-text hover:text-foreground"
             }`}
           >
             <div className="flex items-center justify-center gap-2">
@@ -241,8 +241,8 @@ export default function TrendingPage() {
         <div className="px-4">
           {/* Location indicator */}
           {userLocation && (
-            <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-              <svg className="w-4 h-4 text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="flex items-center gap-2 text-xs text-primary-text mb-3 opacity-70">
+              <svg className="w-3.5 h-3.5 text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
               </svg>
               Showing dishes within 10 miles
@@ -250,76 +250,71 @@ export default function TrendingPage() {
           )}
 
           {dishesLoading ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="bg-white rounded-2xl p-4 animate-pulse">
+                <div key={i} className="glass rounded-lg p-3 animate-pulse">
                   <div className="flex gap-3">
-                    <div className="w-16 h-16 bg-gray-200 rounded-xl" />
+                    <div className="w-12 h-12 glass-soft rounded-lg" />
                     <div className="flex-1">
-                      <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
-                      <div className="h-3 bg-gray-200 rounded w-1/2" />
+                      <div className="h-3 glass-soft rounded w-3/4 mb-2" />
+                      <div className="h-2 glass-soft rounded w-1/2" />
                     </div>
                   </div>
                 </div>
               ))}
             </div>
           ) : trendingDishes.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {trendingDishes.map((dish, index) => (
                 <Link
                   key={dish.dishId}
                   href={`/dish/${dish.dishId}`}
-                  className="block bg-white rounded-2xl p-4 border border-gray-100 hover:border-gray-200 transition-all hover:shadow-sm"
+                  className="block glass rounded-lg p-3 card-shadow hover:glass-strong transition-all"
                 >
                   <div className="flex gap-3">
                     {/* Rank */}
-                    <div className="flex-shrink-0 w-8 flex items-center justify-center">
-                      <span className={`text-lg font-bold ${
-                        index === 0 ? "text-yellow-500" :
-                        index === 1 ? "text-gray-400" :
-                        index === 2 ? "text-amber-600" :
-                        "text-gray-300"
+                    <div className="flex-shrink-0 w-6 flex items-center justify-center">
+                      <span className={`text-sm font-bold ${
+                        index === 0 ? "text-primary-dark" :
+                        index === 1 ? "text-primary-text" :
+                        index === 2 ? "text-primary-text opacity-80" :
+                        "text-primary-text opacity-50"
                       }`}>
                         {index + 1}
                       </span>
                     </div>
 
                     {/* Image */}
-                    <div className="relative flex-shrink-0">
+                    <div className="flex-shrink-0">
                       <img
                         src={dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"}
                         alt={dish.name}
-                        className="w-16 h-16 rounded-xl object-cover"
+                        className="w-12 h-12 rounded-lg object-cover"
                       />
-                      {dish.isNew && (
-                        <div className="absolute -top-1 -right-1 bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                          NEW
-                        </div>
-                      )}
                     </div>
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <h3 className="font-semibold text-gray-900 truncate">{dish.name}</h3>
-                          <p className="text-xs text-gray-500 truncate">{dish.restaurantName}</p>
+                          <h3 className="font-medium text-foreground truncate text-sm">{dish.name}</h3>
+                          <p className="text-[10px] text-primary-text truncate opacity-70">{dish.restaurantName}</p>
                         </div>
                         <div className="text-right flex-shrink-0">
-                          <p className="font-semibold text-gray-900">{formatPrice(dish.currentPrice)}</p>
-                          <p className={`text-xs font-medium ${
-                            dish.priceChange >= 0 ? "text-green-600" : "text-red-600"
+                          <p className="font-semibold text-foreground text-sm">{formatPrice(dish.currentPrice)}</p>
+                          <p className={`text-[10px] font-medium ${
+                            dish.priceChange >= 0 ? "text-primary-dark" : "text-primary-dark opacity-60"
                           }`}>
                             {formatChange(dish.priceChange)}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                      <div className="flex items-center gap-2.5 mt-1.5 text-[10px] text-primary-text opacity-60">
                         <span className="flex items-center gap-1">
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                           </svg>
-                          {dish.totalHolders} holders
+                          {dish.totalHolders}
                         </span>
                         {dish.distance !== null && (
                           <span className="flex items-center gap-1">
@@ -329,7 +324,7 @@ export default function TrendingPage() {
                             {formatDistance(dish.distance)}
                           </span>
                         )}
-                        <span>by @{dish.creatorUsername}</span>
+                        <span>@{dish.creatorUsername}</span>
                       </div>
                     </div>
                   </div>
@@ -338,42 +333,42 @@ export default function TrendingPage() {
             </div>
           ) : (
             <div className="text-center py-12">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-12 h-12 glass-soft rounded-lg flex items-center justify-center mx-auto mb-3">
+                <svg className="w-6 h-6 text-primary-text opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                 </svg>
               </div>
-              <p className="text-gray-500">No trending dishes yet</p>
-              <p className="text-sm text-gray-400 mt-1">Be the first to create one!</p>
+              <p className="text-foreground font-medium mb-1">No trending dishes yet</p>
+              <p className="text-xs text-primary-text opacity-70">Be the first to create one!</p>
             </div>
           )}
         </div>
       ) : (
         <div className="px-4">
           {/* City Filter */}
-          <div className="relative mb-4">
+          <div className="relative mb-3">
             <button
               onClick={() => setShowCityPicker(!showCityPicker)}
-              className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 transition-colors"
+              className="flex items-center gap-2 glass rounded-lg px-3 py-2 text-sm font-medium text-foreground hover:glass-strong transition-all w-full"
             >
               <svg className="w-4 h-4 text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               {userFilter === "global" ? "Global" : userFilter}
-              <svg className={`w-4 h-4 text-gray-400 transition-transform ${showCityPicker ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`w-4 h-4 text-primary-text opacity-70 transition-transform ${showCityPicker ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
 
             {showCityPicker && (
-              <div className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-lg border border-gray-100 py-1 min-w-[180px] max-h-64 overflow-y-auto z-20">
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-card-border py-1 max-h-64 overflow-y-auto z-20">
                 <button
                   onClick={() => {
                     setUserFilter("global");
                     setShowCityPicker(false);
                   }}
-                  className={`w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
-                    userFilter === "global" ? "text-primary-dark font-medium" : "text-gray-700"
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-primary-light flex items-center justify-between transition-colors ${
+                    userFilter === "global" ? "text-primary-dark font-medium bg-primary-light" : "text-foreground"
                   }`}
                 >
                   <span className="flex items-center gap-2">
@@ -383,21 +378,21 @@ export default function TrendingPage() {
                     Global
                   </span>
                   {userFilter === "global" && (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   )}
                 </button>
                 {currentUserCity && (
                   <>
-                    <div className="border-t border-gray-100 my-1" />
+                    <div className="border-t border-card-border my-1" />
                     <button
                       onClick={() => {
                         setUserFilter(currentUserCity);
                         setShowCityPicker(false);
                       }}
-                      className={`w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
-                        userFilter === currentUserCity ? "text-primary-dark font-medium" : "text-gray-700"
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-primary-light flex items-center justify-between transition-colors ${
+                        userFilter === currentUserCity ? "text-primary-dark font-medium bg-primary-light" : "text-foreground"
                       }`}
                     >
                       <span className="flex items-center gap-2">
@@ -405,10 +400,10 @@ export default function TrendingPage() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                         </svg>
                         {currentUserCity}
-                        <span className="text-xs text-gray-400">(your city)</span>
+                        <span className="text-xs text-primary-text opacity-60">(your city)</span>
                       </span>
                       {userFilter === currentUserCity && (
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                       )}
@@ -417,8 +412,8 @@ export default function TrendingPage() {
                 )}
                 {cities.length > 0 && (
                   <>
-                    <div className="border-t border-gray-100 my-1" />
-                    <div className="px-4 py-1.5 text-xs text-gray-400 font-medium">All Cities</div>
+                    <div className="border-t border-card-border my-1" />
+                    <div className="px-3 py-1.5 text-xs text-primary-text opacity-70 font-medium">All Cities</div>
                     {cities.filter(c => c !== currentUserCity).map((city) => (
                       <button
                         key={city}
@@ -426,13 +421,13 @@ export default function TrendingPage() {
                           setUserFilter(city);
                           setShowCityPicker(false);
                         }}
-                        className={`w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
-                          userFilter === city ? "text-primary-dark font-medium" : "text-gray-700"
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-primary-light flex items-center justify-between transition-colors ${
+                          userFilter === city ? "text-primary-dark font-medium bg-primary-light" : "text-foreground"
                         }`}
                       >
                         {city}
                         {userFilter === city && (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4 text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
                         )}
@@ -445,40 +440,40 @@ export default function TrendingPage() {
           </div>
 
           {usersLoading ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="bg-white rounded-2xl p-4 animate-pulse">
+                <div key={i} className="glass rounded-lg p-3 animate-pulse">
                   <div className="flex gap-3">
-                    <div className="w-12 h-12 bg-gray-200 rounded-full" />
+                    <div className="w-10 h-10 glass-soft rounded-full" />
                     <div className="flex-1">
-                      <div className="h-4 bg-gray-200 rounded w-1/2 mb-2" />
-                      <div className="h-3 bg-gray-200 rounded w-1/3" />
+                      <div className="h-3 glass-soft rounded w-1/2 mb-2" />
+                      <div className="h-2 glass-soft rounded w-1/3" />
                     </div>
                   </div>
                 </div>
               ))}
             </div>
           ) : topUsers.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {topUsers.map((user) => (
                 <Link
                   key={user.fid}
                   href={`/profile/${user.fid}`}
-                  className="block bg-white rounded-2xl p-4 border border-gray-100 hover:border-gray-200 transition-all hover:shadow-sm"
+                  className="block glass rounded-lg p-3 card-shadow hover:glass-strong transition-all"
                 >
                   <div className="flex items-center gap-3">
                     {/* Rank */}
-                    <div className="flex-shrink-0 w-8 flex items-center justify-center">
+                    <div className="flex-shrink-0 w-6 flex items-center justify-center">
                       {user.rank <= 3 ? (
-                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
-                          user.rank === 1 ? "bg-yellow-100 text-yellow-600" :
-                          user.rank === 2 ? "bg-gray-100 text-gray-500" :
-                          "bg-amber-100 text-amber-600"
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold glass-primary ${
+                          user.rank === 1 ? "text-primary-dark" :
+                          user.rank === 2 ? "text-primary-text" :
+                          "text-primary-text opacity-80"
                         }`}>
                           {user.rank}
                         </div>
                       ) : (
-                        <span className="text-gray-400 font-medium">{user.rank}</span>
+                        <span className="text-primary-text opacity-50 font-medium text-sm">{user.rank}</span>
                       )}
                     </div>
 
@@ -487,11 +482,11 @@ export default function TrendingPage() {
                       <img
                         src={user.pfpUrl}
                         alt={user.username}
-                        className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+                        className="w-10 h-10 rounded-full object-cover flex-shrink-0"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-light to-primary-soft flex items-center justify-center flex-shrink-0">
-                        <span className="text-primary-dark font-semibold text-lg">
+                      <div className="w-10 h-10 rounded-full glass-primary flex items-center justify-center flex-shrink-0">
+                        <span className="text-primary-dark font-semibold text-sm">
                           {user.username.charAt(0).toUpperCase()}
                         </span>
                       </div>
@@ -499,20 +494,20 @@ export default function TrendingPage() {
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-gray-900 truncate">
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="font-medium text-foreground truncate text-sm">
                           {user.displayName || user.username}
                         </h3>
                         {user.rank === 1 && (
-                          <span className="text-yellow-500">
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                          <span className="text-primary-dark">
+                            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                               <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                             </svg>
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500">@{user.username}</p>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
+                      <p className="text-[10px] text-primary-text opacity-70">@{user.username}</p>
+                      <div className="flex items-center gap-2.5 mt-1 text-[10px] text-primary-text opacity-60">
                         <span>{user.dishCount} stamps</span>
                         {user.primaryCity && <span>{user.primaryCity}</span>}
                       </div>
@@ -520,9 +515,9 @@ export default function TrendingPage() {
 
                     {/* Stats */}
                     <div className="text-right flex-shrink-0">
-                      <p className="font-semibold text-gray-900">{formatValue(user.portfolioValue)}</p>
-                      <p className={`text-xs font-medium ${
-                        user.valueChangePercent >= 0 ? "text-green-600" : "text-red-600"
+                      <p className="font-semibold text-foreground text-sm">{formatValue(user.portfolioValue)}</p>
+                      <p className={`text-[10px] font-medium ${
+                        user.valueChangePercent >= 0 ? "text-primary-dark" : "text-primary-dark opacity-60"
                       }`}>
                         {formatChange(user.valueChangePercent)}
                       </p>
@@ -533,13 +528,13 @@ export default function TrendingPage() {
             </div>
           ) : (
             <div className="text-center py-12">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-12 h-12 glass-soft rounded-lg flex items-center justify-center mx-auto mb-3">
+                <svg className="w-6 h-6 text-primary-text opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
               </div>
-              <p className="text-gray-500">No users found</p>
-              <p className="text-sm text-gray-400 mt-1">
+              <p className="text-foreground font-medium mb-1">No users found</p>
+              <p className="text-xs text-primary-text opacity-70">
                 {userFilter !== "global" ? "Try switching to Global" : "Be the first to join!"}
               </p>
             </div>

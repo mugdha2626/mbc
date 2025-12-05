@@ -11,12 +11,12 @@ interface HeaderProps {
 
 export function Header({ showSearch = true, title, onBack, rightAction }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-lg px-4 py-3 border-b border-gray-100">
+    <header className="sticky top-0 z-40 glass-strong px-4 py-3 border-b border-card-border">
       <div className="flex items-center gap-3">
         {onBack && (
           <button
             onClick={onBack}
-            className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+            className="p-2 rounded-full glass-soft hover:glass-primary transition-colors"
           >
             <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -51,7 +51,7 @@ export function Header({ showSearch = true, title, onBack, rightAction }: Header
         )}
 
         {!title && !rightAction && (
-          <button className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors">
+          <button className="p-2 rounded-full glass-soft hover:glass-primary transition-colors">
             <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
             </svg>

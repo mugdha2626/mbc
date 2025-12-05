@@ -148,14 +148,16 @@ export default function CreatePage() {
   const [dishDescription, setDishDescription] = useState("");
   const [mintTokenAmount, setMintTokenAmount] = useState(1);
   const [dishExists, setDishExists] = useState(false);
-  const [existingDishes, setExistingDishes] = useState<Array<{
-    dishId: string;
-    name: string;
-    image?: string;
-    currentPrice: number;
-    currentSupply: number;
-    totalHolders: number;
-  }>>([]);
+  const [existingDishes, setExistingDishes] = useState<
+    Array<{
+      dishId: string;
+      name: string;
+      image?: string;
+      currentPrice: number;
+      currentSupply: number;
+      totalHolders: number;
+    }>
+  >([]);
   const [loadingExistingDishes, setLoadingExistingDishes] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
@@ -260,7 +262,9 @@ export default function CreatePage() {
       setShowCreateForm(false);
 
       try {
-        const res = await fetch(`/api/restaurants/${selectedRestaurant.id}/dishes`);
+        const res = await fetch(
+          `/api/restaurants/${selectedRestaurant.id}/dishes`
+        );
         if (res.ok) {
           const data = await res.json();
           setExistingDishes(data.dishes || []);
@@ -1263,16 +1267,16 @@ export default function CreatePage() {
     mintError?.message;
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="min-h-screen bg-gradient-pink pb-24">
       {/* Header */}
-      <header className="bg-white px-4 py-4 border-b border-gray-100">
+      <header className="glass-strong px-4 py-4 border-b border-card-border">
         <div className="flex items-center gap-3">
           <button
             onClick={() => (step > 1 ? setStep(step - 1) : router.back())}
-            className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-full hover:glass transition-colors"
           >
             <svg
-              className="w-5 h-5 text-gray-700"
+              className="w-5 h-5 text-foreground"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -1285,21 +1289,21 @@ export default function CreatePage() {
               />
             </svg>
           </button>
-          <h1 className="text-lg font-semibold text-gray-900">
+          <h1 className="text-lg font-semibold text-foreground">
             Create Dish Stamp
           </h1>
         </div>
       </header>
 
       {/* Progress Steps */}
-      <div className="bg-white px-4 py-4 border-b border-gray-100">
+      <div className="glass-strong px-4 py-4 border-b border-card-border">
         <div className="flex items-center justify-between relative">
           <div className="absolute top-4 left-4 right-4 h-1 flex">
             {[1, 2, 3].map((s) => (
               <div
                 key={s}
                 className={`flex-1 h-1 ${
-                  s < step ? "bg-green-500" : "bg-gray-200"
+                  s < step ? "bg-primary-dark" : "bg-card-border"
                 }`}
               />
             ))}
@@ -1309,10 +1313,10 @@ export default function CreatePage() {
               key={s}
               className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium z-10 ${
                 s < step
-                  ? "bg-green-500 text-white"
+                  ? "bg-primary-dark text-white"
                   : s === step
-                  ? "btn-primary"
-                  : "bg-gray-100 text-gray-400"
+                  ? "bg-primary-dark text-white"
+                  : "bg-white/80 text-primary-text"
               }`}
             >
               {s < step ? (
@@ -1335,7 +1339,7 @@ export default function CreatePage() {
             </div>
           ))}
         </div>
-        <div className="flex justify-between mt-2 text-xs text-gray-500">
+        <div className="flex justify-between mt-2 text-xs text-primary-text">
           <span>Search</span>
           <span>Verify</span>
           <span>Details</span>
@@ -1514,63 +1518,83 @@ export default function CreatePage() {
             {loadingExistingDishes && (
               <div className="flex items-center justify-center py-8">
                 <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-                <span className="ml-3 text-gray-500">Loading existing dishes...</span>
+                <span className="ml-3 text-gray-500">
+                  Loading existing dishes...
+                </span>
               </div>
             )}
 
             {/* Show existing dishes if available and not in create mode */}
-            {!loadingExistingDishes && existingDishes.length > 0 && !showCreateForm && (
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-2">
-                  Existing Dishes
-                </h2>
-                <p className="text-sm text-gray-500 mb-4">
-                  This restaurant already has {existingDishes.length} dish{existingDishes.length > 1 ? 'es' : ''}.
-                  Tap one to mint, or create a new dish.
-                </p>
-                <div className="space-y-3 mb-4">
-                  {existingDishes.map((dish) => (
-                    <button
-                      key={dish.dishId}
-                      onClick={() => router.push(`/dish/${dish.dishId}`)}
-                      className="w-full bg-white border border-gray-200 rounded-xl p-4 hover:border-blue-500 hover:shadow-sm transition-all text-left"
-                    >
-                      <div className="flex gap-3">
-                        <img
-                          src={dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"}
-                          alt={dish.name}
-                          className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900 truncate">{dish.name}</p>
-                          <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
-                            <span>{dish.currentSupply} minted</span>
-                            <span>{dish.totalHolders} holders</span>
+            {!loadingExistingDishes &&
+              existingDishes.length > 0 &&
+              !showCreateForm && (
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 mb-2">
+                    Existing Dishes
+                  </h2>
+                  <p className="text-sm text-gray-500 mb-4">
+                    This restaurant already has {existingDishes.length} dish
+                    {existingDishes.length > 1 ? "es" : ""}. Tap one to mint, or
+                    create a new dish.
+                  </p>
+                  <div className="space-y-3 mb-4">
+                    {existingDishes.map((dish) => (
+                      <button
+                        key={dish.dishId}
+                        onClick={() => router.push(`/dish/${dish.dishId}`)}
+                        className="w-full bg-white border border-gray-200 rounded-xl p-4 hover:border-blue-500 hover:shadow-sm transition-all text-left"
+                      >
+                        <div className="flex gap-3">
+                          <img
+                            src={
+                              dish.image ||
+                              "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"
+                            }
+                            alt={dish.name}
+                            className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-gray-900 truncate">
+                              {dish.name}
+                            </p>
+                            <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
+                              <span>{dish.currentSupply} minted</span>
+                              <span>{dish.totalHolders} holders</span>
+                            </div>
+                            <p className="text-sm font-semibold text-green-600 mt-1">
+                              ${dish.currentPrice.toFixed(2)}
+                            </p>
                           </div>
-                          <p className="text-sm font-semibold text-green-600 mt-1">
-                            ${dish.currentPrice.toFixed(2)}
-                          </p>
+                          <div className="flex items-center">
+                            <span className="px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-full">
+                              Mint
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-center">
-                          <span className="px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-full">
-                            Mint
-                          </span>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setShowCreateForm(true)}
+                    className="w-full border-2 border-dashed border-gray-300 rounded-xl p-4 flex items-center justify-center gap-2 text-gray-600 hover:border-gray-400 hover:text-gray-700 transition-colors"
+                  >
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                      />
+                    </svg>
+                    Create a New Dish
+                  </button>
                 </div>
-                <button
-                  onClick={() => setShowCreateForm(true)}
-                  className="w-full border-2 border-dashed border-gray-300 rounded-xl p-4 flex items-center justify-center gap-2 text-gray-600 hover:border-gray-400 hover:text-gray-700 transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  Create a New Dish
-                </button>
-              </div>
-            )}
+              )}
 
             {/* Create dish form */}
             {!loadingExistingDishes && showCreateForm && (
@@ -1580,8 +1604,18 @@ export default function CreatePage() {
                     onClick={() => setShowCreateForm(false)}
                     className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 19l-7-7 7-7"
+                      />
                     </svg>
                     Back to existing dishes
                   </button>

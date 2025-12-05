@@ -31,7 +31,7 @@ export function FilterPills({ filters, defaultActive, onFilterChange }: FilterPi
           className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
             active === filter.id
               ? "btn-primary"
-              : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700"
+              : "glass-soft text-primary-text hover:glass-primary hover:text-foreground"
           }`}
         >
           {filter.icon}
@@ -47,7 +47,7 @@ export const mapFilters: Filter[] = [
   {
     id: "near",
     label: "Near me",
-    icon: <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
+    icon: <svg className="w-3 h-3 text-[var(--accent-green)]" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
   },
   {
     id: "top",

@@ -16,29 +16,29 @@ interface StatCardProps {
 
 export function StatCard({ stats, trend }: StatCardProps) {
   return (
-    <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-5">
+    <div className="glass-strong rounded-2xl p-5 border-card-border">
       <div className="grid grid-cols-2 gap-4">
         {stats.map((stat, index) => (
           <div key={index}>
-            <p className="text-xs text-zinc-500 mb-1">{stat.label}</p>
-            <p className="text-xl font-bold text-white">{stat.value}</p>
+            <p className="text-xs text-primary-text mb-1">{stat.label}</p>
+            <p className="text-xl font-bold text-foreground">{stat.value}</p>
           </div>
         ))}
       </div>
 
       {trend && (
-        <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center justify-between">
+        <div className="mt-4 pt-4 border-t border-card-border flex items-center justify-between">
           <div className="flex items-center gap-2">
             {trend.positive ? (
-              <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+              <svg className="w-4 h-4 text-[var(--accent-mint)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
             ) : (
-              <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/></svg>
+              <svg className="w-4 h-4 text-primary-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/></svg>
             )}
-            <span className={`font-semibold ${trend.positive ? "text-green-400" : "text-red-400"}`}>
+            <span className={`font-semibold ${trend.positive ? "text-[var(--accent-mint)]" : "text-primary-dark"}`}>
               {trend.value}
             </span>
             {trend.label && (
-              <span className="text-zinc-500 text-sm">{trend.label}</span>
+              <span className="text-primary-text text-sm">{trend.label}</span>
             )}
           </div>
 
@@ -47,7 +47,7 @@ export function StatCard({ stats, trend }: StatCardProps) {
             {[40, 55, 45, 60, 50, 70, 65, 80].map((height, i) => (
               <div
                 key={i}
-                className={`w-1 rounded-full ${trend.positive ? "bg-green-500" : "bg-red-500"}`}
+                className={`w-1 rounded-full ${trend.positive ? "bg-[var(--accent-mint)]" : "bg-primary-dark"}`}
                 style={{ height: `${height}%` }}
               />
             ))}
