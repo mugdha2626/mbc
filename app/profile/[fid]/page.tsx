@@ -409,7 +409,7 @@ export default function UserProfilePage() {
             {holdings.map((holding) => (
               <Link
                 key={holding.dishId}
-                href={`/dish/${holding.dishId}`}
+                href={`/dish/${holding.dishId}?ref=${fid}`}
                 className="block bg-white rounded-2xl p-4 border border-gray-100 hover:border-gray-200 transition-colors"
               >
                 <div className="flex gap-3">
@@ -508,7 +508,7 @@ export default function UserProfilePage() {
         {createdDishes.length > 0 ? (
           <div className="space-y-3">
             {createdDishes.map((dish) => (
-              <Link key={dish.dishId} href={`/dish/${dish.dishId}`}>
+              <Link key={dish.dishId} href={`/dish/${dish.dishId}?ref=${fid}`}>
                 <div className="bg-white rounded-2xl p-4 border border-gray-100 flex items-center gap-3">
                   <img
                     src={
