@@ -23,6 +23,7 @@ import { baseSepolia } from "viem/chains";
 import { useAccount, useSendCalls, useCallsStatus } from "wagmi";
 import { TMAP_DISHES_ADDRESS, USDC_ADDRESS, ERC20_ABI } from "@/lib/contracts";
 import { InlineFaucetButton } from "@/app/components/ui/InlineFaucetButton";
+import { compressImageToBase64, validateImageFile } from "@/lib/imageUtils";
 
 // ABIs
 const erc20Abi = parseAbi([
@@ -147,6 +148,9 @@ export default function CreatePage() {
   // Step 3: Dish details
   const [dishName, setDishName] = useState("");
   const [dishDescription, setDishDescription] = useState("");
+  const [dishImage, setDishImage] = useState<string | null>(null); // base64 image
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageError, setImageError] = useState("");
   const [mintTokenAmount, setMintTokenAmount] = useState(1);
   const [dishExists, setDishExists] = useState(false);
   const [existingDishes, setExistingDishes] = useState<
@@ -994,6 +998,7 @@ export default function CreatePage() {
           dishId,
           name: dishName.trim(),
           description: dishDescription.trim() || undefined,
+          image: dishImage, // base64 image
           restaurantId: selectedRestaurant.id,
           restaurantName: selectedRestaurant.name,
           restaurantAddress: selectedRestaurant.address,
@@ -1223,6 +1228,40 @@ export default function CreatePage() {
 
     return () => clearTimeout(debounceTimer);
   }, [searchQuery, userLocation]);
+
+  // Handle image upload
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImageError("");
+    setImageUploading(true);
+
+    try {
+      // Validate file
+      const validation = validateImageFile(file, 10); // 10MB max
+      if (!validation.isValid) {
+        setImageError(validation.error || "Invalid image");
+        setImageUploading(false);
+        return;
+      }
+
+      // Compress and convert to base64
+      const compressed = await compressImageToBase64(file, 800, 800, 0.8);
+
+      // Check compressed size (warn if still large)
+      if (compressed.sizeKB > 500) {
+        console.warn(`Compressed image is ${compressed.sizeKB}KB, consider further optimization`);
+      }
+
+      setDishImage(compressed.base64);
+    } catch (err) {
+      console.error("Error processing image:", err);
+      setImageError("Failed to process image. Please try another.");
+    } finally {
+      setImageUploading(false);
+    }
+  };
 
   // Verify location
   const handleVerifyLocation = async () => {
@@ -1669,6 +1708,73 @@ export default function CreatePage() {
                   Create New Dish
                 </h2>
                 <div className="space-y-4">
+                  {/* Dish Image Upload */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Dish Photo *
+                    </label>
+                    <div className="relative">
+                      {dishImage ? (
+                        <div className="relative">
+                          <img
+                            src={dishImage}
+                            alt="Dish preview"
+                            className="w-full h-48 object-cover rounded-xl border border-gray-200"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setDishImage(null)}
+                            className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                          <label className="absolute bottom-2 right-2 px-3 py-1.5 bg-white/90 hover:bg-white rounded-lg text-sm font-medium text-gray-700 cursor-pointer transition-colors shadow-sm">
+                            Change
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleImageUpload}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      ) : (
+                        <label className={`flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
+                          imageError ? "border-red-300 bg-red-50" : "border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400"
+                        }`}>
+                          {imageUploading ? (
+                            <div className="flex flex-col items-center">
+                              <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin mb-2" />
+                              <span className="text-sm text-gray-500">Processing...</span>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center">
+                              <svg className="w-10 h-10 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                              <span className="text-sm font-medium text-gray-600">Tap to upload photo</span>
+                              <span className="text-xs text-gray-400 mt-1">JPG, PNG, WebP up to 10MB</span>
+                            </div>
+                          )}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleImageUpload}
+                            className="hidden"
+                            disabled={imageUploading}
+                          />
+                        </label>
+                      )}
+                    </div>
+                    {imageError && (
+                      <p className="text-sm text-red-600 mt-2">{imageError}</p>
+                    )}
+                  </div>
+
+                  {/* Dish Name */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Dish Name *
@@ -1681,6 +1787,8 @@ export default function CreatePage() {
                       className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
+
+                  {/* Description */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Description (optional)
@@ -1696,11 +1804,16 @@ export default function CreatePage() {
                 </div>
                 <button
                   onClick={() => setStep(4)}
-                  disabled={!dishName.trim()}
+                  disabled={!dishName.trim() || !dishImage}
                   className="w-full btn-primary disabled:bg-gray-200 disabled:text-gray-400 font-semibold py-4 rounded-xl mt-6"
                 >
                   Continue
                 </button>
+                {!dishImage && dishName.trim() && (
+                  <p className="text-xs text-amber-600 text-center mt-2">
+                    Please upload a photo of the dish
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -1730,17 +1843,42 @@ export default function CreatePage() {
               <h3 className="font-semibold text-gray-900 mb-4">
                 {dishExists ? "Review Your Mint" : "Review Your Stamp"}
               </h3>
+
+              {/* Dish Preview with Image */}
+              {dishImage && (
+                <div className="mb-4">
+                  <div className="flex gap-4">
+                    <img
+                      src={dishImage}
+                      alt={dishName}
+                      className="w-24 h-24 rounded-xl object-cover border border-gray-200"
+                    />
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900 text-lg">{dishName}</p>
+                      <p className="text-sm text-gray-500 mt-1">{selectedRestaurant.name}</p>
+                      {dishDescription && (
+                        <p className="text-sm text-gray-400 mt-1 line-clamp-2">{dishDescription}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-4">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Restaurant</span>
-                  <span className="font-medium text-gray-900">
-                    {selectedRestaurant.name}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Dish</span>
-                  <span className="font-medium text-gray-900">{dishName}</span>
-                </div>
+                {!dishImage && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Restaurant</span>
+                      <span className="font-medium text-gray-900">
+                        {selectedRestaurant.name}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Dish</span>
+                      <span className="font-medium text-gray-900">{dishName}</span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between">
                   <span className="text-gray-500">Network</span>
                   <span className="font-medium text-indigo-600">
