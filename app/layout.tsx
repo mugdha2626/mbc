@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Base URL for assets - update this for production
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://tmap.app";
+// Base URL for assets
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://mbc-tau.vercel.app";
 
 export const metadata: Metadata = {
   title: "tmap - Social Map of Food Culture",
