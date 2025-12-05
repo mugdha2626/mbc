@@ -4,6 +4,7 @@ import { useRouter, useParams } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { BottomNav } from "@/app/components/layout/BottomNav";
 import { BackedDishCard } from "@/app/components/cards/BackedDishCard";
+import { navigateBack } from "@/lib/navigation";
 
 interface DishData {
   dishId: string;
@@ -115,7 +116,7 @@ export default function RestaurantPage() {
         <div className="text-center">
           <p className="text-gray-500 mb-4">{error || "Restaurant not found"}</p>
           <button
-            onClick={() => router.back()}
+            onClick={() => navigateBack(router, "/")}
             className="text-primary-dark font-medium hover:underline"
           >
             Go back
@@ -137,9 +138,9 @@ export default function RestaurantPage() {
         />
         <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent" />
 
-        {/* Back button */}
+        {/* Back/Home button */}
         <button
-          onClick={() => router.back()}
+          onClick={() => navigateBack(router, "/")}
           className="absolute top-4 left-4 p-2 rounded-full bg-white/90 backdrop-blur-sm hover:bg-white transition-colors shadow-sm"
         >
           <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">

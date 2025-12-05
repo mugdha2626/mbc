@@ -148,6 +148,16 @@ export default function CreatePage() {
   const [dishDescription, setDishDescription] = useState("");
   const [mintTokenAmount, setMintTokenAmount] = useState(1);
   const [dishExists, setDishExists] = useState(false);
+  const [existingDishes, setExistingDishes] = useState<Array<{
+    dishId: string;
+    name: string;
+    image?: string;
+    currentPrice: number;
+    currentSupply: number;
+    totalHolders: number;
+  }>>([]);
+  const [loadingExistingDishes, setLoadingExistingDishes] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   // Step 4: Creating
   const [createStep, setCreateStep] = useState<CreateStep>("idle");
@@ -240,6 +250,39 @@ export default function CreatePage() {
       })
       .catch(() => {});
   }, []);
+
+  // Fetch existing dishes when entering step 3 (after selecting restaurant)
+  useEffect(() => {
+    const fetchExistingDishes = async () => {
+      if (step !== 3 || !selectedRestaurant) return;
+
+      setLoadingExistingDishes(true);
+      setShowCreateForm(false);
+
+      try {
+        const res = await fetch(`/api/restaurants/${selectedRestaurant.id}/dishes`);
+        if (res.ok) {
+          const data = await res.json();
+          setExistingDishes(data.dishes || []);
+          // If no existing dishes, show the create form directly
+          if (!data.dishes || data.dishes.length === 0) {
+            setShowCreateForm(true);
+          }
+        } else {
+          setExistingDishes([]);
+          setShowCreateForm(true);
+        }
+      } catch (err) {
+        console.error("Error fetching existing dishes:", err);
+        setExistingDishes([]);
+        setShowCreateForm(true);
+      } finally {
+        setLoadingExistingDishes(false);
+      }
+    };
+
+    fetchExistingDishes();
+  }, [step, selectedRestaurant]);
 
   // Simple logging helper (no UI display)
   const addDebug = (msg: string) => console.log("[Create]", msg);
@@ -1460,50 +1503,127 @@ export default function CreatePage() {
         {/* Step 3: Dish Details */}
         {step === 3 && selectedRestaurant && (
           <div className="space-y-6">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Dish Details
-              </h2>
-              <div className="bg-gray-100 rounded-xl p-3 mb-4">
-                <p className="text-xs text-gray-500">Restaurant</p>
-                <p className="font-medium text-gray-900">
-                  {selectedRestaurant.name}
-                </p>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Dish Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={dishName}
-                    onChange={(e) => setDishName(e.target.value)}
-                    placeholder="e.g., Truffle Mushroom Risotto"
-                    className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Description (optional)
-                  </label>
-                  <textarea
-                    value={dishDescription}
-                    onChange={(e) => setDishDescription(e.target.value)}
-                    placeholder="Describe the dish..."
-                    rows={3}
-                    className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                  />
-                </div>
-              </div>
+            <div className="bg-gray-100 rounded-xl p-3">
+              <p className="text-xs text-gray-500">Restaurant</p>
+              <p className="font-medium text-gray-900">
+                {selectedRestaurant.name}
+              </p>
             </div>
-            <button
-              onClick={() => setStep(4)}
-              disabled={!dishName.trim()}
-              className="w-full btn-primary disabled:bg-gray-200 disabled:text-gray-400 font-semibold py-4 rounded-xl"
-            >
-              Continue
-            </button>
+
+            {/* Loading state */}
+            {loadingExistingDishes && (
+              <div className="flex items-center justify-center py-8">
+                <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                <span className="ml-3 text-gray-500">Loading existing dishes...</span>
+              </div>
+            )}
+
+            {/* Show existing dishes if available and not in create mode */}
+            {!loadingExistingDishes && existingDishes.length > 0 && !showCreateForm && (
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 mb-2">
+                  Existing Dishes
+                </h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  This restaurant already has {existingDishes.length} dish{existingDishes.length > 1 ? 'es' : ''}.
+                  Tap one to mint, or create a new dish.
+                </p>
+                <div className="space-y-3 mb-4">
+                  {existingDishes.map((dish) => (
+                    <button
+                      key={dish.dishId}
+                      onClick={() => router.push(`/dish/${dish.dishId}`)}
+                      className="w-full bg-white border border-gray-200 rounded-xl p-4 hover:border-blue-500 hover:shadow-sm transition-all text-left"
+                    >
+                      <div className="flex gap-3">
+                        <img
+                          src={dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200"}
+                          alt={dish.name}
+                          className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 truncate">{dish.name}</p>
+                          <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
+                            <span>{dish.currentSupply} minted</span>
+                            <span>{dish.totalHolders} holders</span>
+                          </div>
+                          <p className="text-sm font-semibold text-green-600 mt-1">
+                            ${dish.currentPrice.toFixed(2)}
+                          </p>
+                        </div>
+                        <div className="flex items-center">
+                          <span className="px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-medium rounded-full">
+                            Mint
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setShowCreateForm(true)}
+                  className="w-full border-2 border-dashed border-gray-300 rounded-xl p-4 flex items-center justify-center gap-2 text-gray-600 hover:border-gray-400 hover:text-gray-700 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  Create a New Dish
+                </button>
+              </div>
+            )}
+
+            {/* Create dish form */}
+            {!loadingExistingDishes && showCreateForm && (
+              <div>
+                {existingDishes.length > 0 && (
+                  <button
+                    onClick={() => setShowCreateForm(false)}
+                    className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    Back to existing dishes
+                  </button>
+                )}
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                  Create New Dish
+                </h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Dish Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={dishName}
+                      onChange={(e) => setDishName(e.target.value)}
+                      placeholder="e.g., Truffle Mushroom Risotto"
+                      className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Description (optional)
+                    </label>
+                    <textarea
+                      value={dishDescription}
+                      onChange={(e) => setDishDescription(e.target.value)}
+                      placeholder="Describe the dish..."
+                      rows={3}
+                      className="w-full bg-white border border-gray-200 rounded-xl py-3 px-4 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={() => setStep(4)}
+                  disabled={!dishName.trim()}
+                  className="w-full btn-primary disabled:bg-gray-200 disabled:text-gray-400 font-semibold py-4 rounded-xl mt-6"
+                >
+                  Continue
+                </button>
+              </div>
+            )}
           </div>
         )}
 
