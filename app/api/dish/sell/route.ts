@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
           await db.collection("users").updateOne(
             { fid: sellerFid },
             {
-              $pull: { "portfolio.dishes": { dish: dishId } },
+              $pull: { "portfolio.dishes": { dish: dishId } } as any,
               $set: { updatedAt: now },
             }
           );
