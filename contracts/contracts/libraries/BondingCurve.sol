@@ -8,7 +8,7 @@ pragma solidity ^0.8.24;
  *      Uses USDC with 6 decimals
  */
 library BondingCurve {
-    uint256 public constant BASE_PRICE = 100000;
+    uint256 public constant BASE_PRICE = 1_000_000;
     uint256 public constant SLOPE = 12500;
     uint256 public constant REFUND_RATE = 70;
     uint256 public constant REFERRAL_FEE_BPS = 250;

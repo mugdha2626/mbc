@@ -402,7 +402,7 @@ export default function Home() {
         {/* Spots Overlay - Top of Map */}
         {!isLoadingMap && (nearbyCount !== null || restaurants.length > 0) && (
           <div className="absolute top-4 left-0 right-0 z-10 flex justify-center">
-            <div className="inline-flex items-center gap-2 glass-strong rounded-full px-4 py-2 card-shadow">
+            <div className="inline-flex items-center gap-2 bg-white/95 backdrop-blur-sm rounded-full px-4 py-2 shadow-md border border-white/80">
               <span className="w-2 h-2 bg-[var(--accent-mint)] rounded-full animate-pulse" />
               <span className="text-sm text-foreground font-medium">
                 {nearbyCount !== null
