@@ -104,7 +104,7 @@ export function BottomNav() {
         {/* Floating container */}
         <div className="pointer-events-auto relative pt-6">
           {/* Main nav bar - floating pill */}
-          <div className="relative bg-white/80 backdrop-blur-xl border border-white/60 rounded-[27px] shadow-[0_8px_32px_rgba(155,135,197,0.18),0_4px_16px_rgba(0,0,0,0.06)]">
+          <div className="relative bg-white/80 backdrop-blur-xl border border-white/60 rounded-[28px] shadow-[0_8px_32px_rgba(155,135,197,0.18),0_4px_16px_rgba(0,0,0,0.06)]">
             {/* Animated gradient background */}
             <div className="absolute inset-0 bg-gradient-to-r from-[var(--primary-light)]/20 via-transparent to-[var(--accent-mint)]/20 opacity-60 rounded-[28px]" />
             
