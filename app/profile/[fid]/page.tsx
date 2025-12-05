@@ -22,13 +22,16 @@ interface UserData {
 }
 
 interface CreatedDish {
-  tokenAdrress: string;
+  dishId: string;
   name: string;
-  image: string;
+  image?: string;
   currentPrice: number;
   totalHolders: number;
-  restaurant: string;
+  currentSupply: number;
+  restaurantName?: string;
+  dailyPriceChange?: number;
 }
+
 
 function formatCurrency(value: number): string {
   if (value >= 1000) return `$${(value / 1000).toFixed(1)}k`;
@@ -52,6 +55,7 @@ export default function UserProfilePage() {
 
   const [user, setUser] = useState<UserData | null>(null);
   const [createdDishes, setCreatedDishes] = useState<CreatedDish[]>([]);
+  const [wishlisted, setWishlisted] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -68,10 +72,22 @@ export default function UserProfilePage() {
         setUser(userData.user);
 
         // Fetch dishes created by this user
-        const dishesRes = await fetch(`/api/dishes/creator/${fid}`);
+        const dishesRes = await fetch(`/api/dish/created?fid=${fid}`);
         if (dishesRes.ok) {
           const dishesData = await dishesRes.json();
           setCreatedDishes(dishesData.dishes || []);
+        }
+
+        // Fetch current user's wishlist to check which dishes are already wishlisted
+        if (currentUser?.fid) {
+          const wishlistRes = await fetch(`/api/wishlist?fid=${currentUser.fid}`);
+          if (wishlistRes.ok) {
+            const wishlistData = await wishlistRes.json();
+            const wishlistDishIds = new Set<string>(
+              (wishlistData.wishlist || []).map((item: { dish: string }) => item.dish)
+            );
+            setWishlisted(wishlistDishIds);
+          }
         }
       } catch (err) {
         console.error("Failed to fetch:", err);
@@ -82,9 +98,9 @@ export default function UserProfilePage() {
     };
 
     if (fid) fetchData();
-  }, [fid]);
+  }, [fid, currentUser?.fid]);
 
-  const handleAddToWishlist = async (e: React.MouseEvent, dishId: string) => {
+  const handleToggleWishlist = async (e: React.MouseEvent, dishId: string) => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -93,19 +109,39 @@ export default function UserProfilePage() {
       return;
     }
 
+    const isCurrentlyWishlisted = wishlisted.has(dishId);
+
     try {
-      await fetch("/api/wishlist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fid: currentUser.fid,
-          dishId,
-          referrer: parseInt(fid), // The profile owner is the referrer
-        }),
-      });
-      alert("Added to wishlist!");
+      if (isCurrentlyWishlisted) {
+        // Remove from wishlist
+        await fetch("/api/wishlist", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fid: currentUser.fid,
+            dishId,
+          }),
+        });
+        setWishlisted((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(dishId);
+          return newSet;
+        });
+      } else {
+        // Add to wishlist
+        await fetch("/api/wishlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fid: currentUser.fid,
+            dishId,
+            referrer: parseInt(fid), // The profile owner is the referrer
+          }),
+        });
+        setWishlisted((prev) => new Set(prev).add(dishId));
+      }
     } catch (error) {
-      console.error("Failed to add to wishlist", error);
+      console.error("Failed to update wishlist", error);
     }
   };
 
@@ -189,15 +225,9 @@ export default function UserProfilePage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mt-3">
-          <div className="bg-gray-50 rounded-2xl p-4">
-            <p className="text-xs text-gray-500 mb-1">DISHES CREATED</p>
-            <p className="text-xl font-bold text-gray-900">{createdDishes.length}</p>
-          </div>
-          <div className="bg-gray-50 rounded-2xl p-4">
-            <p className="text-xs text-gray-500 mb-1">DISHES HOLDING</p>
-            <p className="text-xl font-bold text-gray-900">{user.portfolio?.dishes?.length || 0}</p>
-          </div>
+        <div className="bg-gray-50 rounded-2xl p-4 mt-3">
+          <p className="text-xs text-gray-500 mb-1">DISHES CREATED</p>
+          <p className="text-xl font-bold text-gray-900">{createdDishes.length}</p>
         </div>
       </div>
 
@@ -207,21 +237,45 @@ export default function UserProfilePage() {
         {createdDishes.length > 0 ? (
           <div className="space-y-3">
             {createdDishes.map((dish) => (
-              <Link key={dish.tokenAdrress} href={`/dish/${dish.tokenAdrress}`}>
-                <div className="bg-white rounded-2xl p-4 border border-gray-100 flex items-center gap-3 relative group">
-                  <img src={dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400"} alt={dish.name} className="w-14 h-14 rounded-xl object-cover" />
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900">{dish.name}</p>
-                    <p className="text-sm text-gray-500">{dish.totalHolders} holders</p>
+              <Link key={dish.dishId} href={`/dish/${dish.dishId}`}>
+                <div className="bg-white rounded-2xl p-4 border border-gray-100 flex items-center gap-3">
+                  <img
+                    src={dish.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400"}
+                    alt={dish.name}
+                    className="w-14 h-14 rounded-xl object-cover"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 truncate">{dish.name}</p>
+                    {dish.restaurantName && (
+                      <p className="text-xs text-gray-500 truncate flex items-center gap-1">
+                        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        </svg>
+                        {dish.restaurantName}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
+                      <span>{dish.currentSupply || 0} minted</span>
+                      <span>{dish.totalHolders || 0} holders</span>
+                    </div>
                   </div>
                   <div className="text-right flex flex-col items-end gap-2">
-                    <p className="font-semibold text-gray-900">${dish.currentPrice.toFixed(2)}</p>
+                    <p className="font-semibold text-green-600">${(dish.currentPrice || 0).toFixed(2)}</p>
                     {currentUser?.fid !== parseInt(fid) && (
                       <button
-                        onClick={(e) => handleAddToWishlist(e, dish.tokenAdrress)}
-                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                        onClick={(e) => handleToggleWishlist(e, dish.dishId)}
+                        className={`p-1.5 rounded-full transition-colors ${
+                          wishlisted.has(dish.dishId)
+                            ? "text-red-500 hover:bg-red-50"
+                            : "text-gray-400 hover:text-red-500 hover:bg-red-50"
+                        }`}
                       >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg
+                          className="w-5 h-5"
+                          fill={wishlisted.has(dish.dishId) ? "currentColor" : "none"}
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                         </svg>
                       </button>
@@ -237,38 +291,6 @@ export default function UserProfilePage() {
           </div>
         )}
       </div>
-
-      {/* Holdings */}
-      {user.portfolio?.dishes && user.portfolio.dishes.length > 0 && (
-        <div className="p-4 pt-0">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Holdings</h3>
-          <div className="space-y-3">
-            {user.portfolio.dishes.map((holding, i) => (
-              <div key={i} className="bg-white rounded-2xl p-4 border border-gray-100 flex justify-between items-center">
-                <div>
-                  <p className="font-medium text-gray-900">Dish Stamp</p>
-                  <p className="text-sm text-gray-500">{holding.quantity} Stamps</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <p className={`font-medium ${holding.return >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {holding.return >= 0 ? '+' : ''}{formatCurrency(holding.return)}
-                  </p>
-                  {currentUser?.fid !== parseInt(fid) && (
-                    <button
-                      onClick={(e) => handleAddToWishlist(e, holding.dish)}
-                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       <BottomNav />
     </div>
