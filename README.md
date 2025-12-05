@@ -32,12 +32,12 @@ Note: Require Base USDC on the testnet. Use the "Get $5" Faucet in case you dont
 | Layer | Tech |
 |-------|------|
 | Frontend | Next.js 15, TypeScript, Tailwind CSS |
-| Blockchain | Base Sepolia, Solidity 0.8.24, Hardhat |
+| Blockchain | Base Sepolia, Solidity, Hardhat |
 | Token | ERC1155 (OpenZeppelin) |
 | Database | MongoDB Atlas |
 | Auth | Farcaster Mini-App SDK |
 | Wallet | wagmi v2, viem, Farcaster Wallet Connector |
-| Paymaster | Coinbase Paymaster (via Farcaster) |
+| Paymaster | Coinbase Paymaster|
 | Maps | Google Maps API |
 
 ## Architecture
