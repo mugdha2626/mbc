@@ -104,21 +104,18 @@ export default function DishPage() {
   const [mintError, setMintError] = useState("");
   const [triggerMint, setTriggerMint] = useState(false);
   const [usdcAmountToMint, setUsdcAmountToMint] = useState<bigint>(BigInt(0));
-  const [debugInfo, setDebugInfo] = useState<string[]>([]);
   const [onChainPrice, setOnChainPrice] = useState<number | null>(null);
   const [userBalance, setUserBalance] = useState(0);
   const [userFid, setUserFid] = useState<Fid | undefined>(undefined);
+
+  // Simple logging helper (no UI display)
+  const addDebug = (msg: string) => console.log("[Dish]", msg);
   const [lastMintAmount, setLastMintAmount] = useState<bigint | null>(null);
   const [lastTokensReceived, setLastTokensReceived] = useState<number | null>(
     null
   );
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
-
-  const addDebug = (msg: string) => {
-    setDebugInfo((prev) => [...prev, msg]);
-    console.log("[Debug]", msg);
-  };
 
   // Wagmi hooks
   const { address, isConnected } = useAccount();
@@ -641,7 +638,6 @@ export default function DishPage() {
     }
 
     setMintError("");
-    setDebugInfo([]);
     resetApprove();
     resetMint();
     setTriggerMint(false);
@@ -1020,14 +1016,18 @@ export default function DishPage() {
           )}
 
           {/* Back More Section */}
-          <div className="bg-white border border-gray-200 rounded-2xl p-4 mb-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Back this dish</h3>
+          <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 mb-6">
+            <h3 className="font-semibold text-slate-900 mb-4">
+              Back this dish
+            </h3>
 
             {/* USDC Balance */}
             {isConnected && (
-              <p className="text-sm text-gray-500 mb-3">
+              <p className="text-sm text-slate-500 mb-3">
                 Your USDC Balance:{" "}
-                <span className="font-medium">${userBalance.toFixed(2)}</span>
+                <span className="font-medium text-slate-700">
+                  ${userBalance.toFixed(2)}
+                </span>
               </p>
             )}
 
@@ -1035,48 +1035,67 @@ export default function DishPage() {
               <button
                 onClick={() => setBackAmount(Math.max(1, backAmount - 1))}
                 disabled={isMinting}
-                className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 disabled:opacity-50"
+                className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors disabled:opacity-50"
               >
-                <span className="text-xl text-gray-600">-</span>
+                <span className="text-xl text-slate-600">−</span>
               </button>
               <div className="flex-1 text-center">
-                <p className="text-3xl font-bold text-gray-900">{backAmount}</p>
-                <p className="text-sm text-gray-500">Stamps</p>
+                <p className="text-3xl font-bold text-slate-900">
+                  {backAmount}
+                </p>
+                <p className="text-sm text-slate-500">Stamps</p>
               </div>
               <button
                 onClick={() => setBackAmount(backAmount + 1)}
                 disabled={isMinting}
-                className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 disabled:opacity-50"
+                className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors disabled:opacity-50"
               >
-                <span className="text-xl text-gray-600">+</span>
+                <span className="text-xl text-slate-600">+</span>
               </button>
             </div>
 
             {/* Mint Error */}
             {mintError && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
-                <p className="text-sm text-red-700">{mintError}</p>
-              </div>
-            )}
-
-            {/* Debug info */}
-            {debugInfo.length > 0 && (
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4">
-                <p className="text-xs text-gray-500 font-medium mb-1">Debug:</p>
-                <div className="text-xs text-gray-600 space-y-0.5 font-mono">
-                  {debugInfo.map((info, i) => (
-                    <p key={i}>{info}</p>
-                  ))}
-                </div>
+              <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 mb-4">
+                <p className="text-sm text-rose-600">{mintError}</p>
               </div>
             )}
 
             {/* Success Message */}
             {mintStep === "complete" && (
-              <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4">
-                <p className="text-sm text-green-700">
-                  Successfully minted! Refreshing...
-                </p>
+              <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <svg
+                    className="w-4 h-4 text-emerald-500"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                  <p className="text-sm text-emerald-700">
+                    Successfully minted! Refreshing...
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Minting Progress */}
+            {isMinting && (
+              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
+                  <p className="text-sm text-indigo-700">
+                    {mintStep === "checking" && "Preparing transaction..."}
+                    {mintStep === "approving" && "Approving USDC..."}
+                    {mintStep === "minting" && "Minting tokens..."}
+                  </p>
+                </div>
               </div>
             )}
 
@@ -1090,7 +1109,7 @@ export default function DishPage() {
               )}
               {!isConnected ? "Connect Wallet to Mint" : getButtonText()}
             </button>
-            <p className="text-center text-xs text-gray-500 mt-2">
+            <p className="text-center text-xs text-slate-500 mt-2">
               Max $10 per dish
             </p>
           </div>

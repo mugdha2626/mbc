@@ -153,7 +153,6 @@ export default function CreatePage() {
   const [createStep, setCreateStep] = useState<CreateStep>("idle");
   const [createError, setCreateError] = useState("");
   const [dishId, setDishId] = useState<Hash | null>(null);
-  const [debugInfo, setDebugInfo] = useState<string[]>([]);
 
   // Track what operations are needed (used in useEffect chain)
   const [needsCreateDish, setNeedsCreateDish] = useState(false);
@@ -242,11 +241,8 @@ export default function CreatePage() {
       .catch(() => {});
   }, []);
 
-  // Helper to add debug info
-  const addDebug = (msg: string) => {
-    setDebugInfo((prev) => [...prev, msg]);
-    console.log("[Debug]", msg);
-  };
+  // Simple logging helper (no UI display)
+  const addDebug = (msg: string) => console.log("[Create]", msg);
 
   // Convert string dishId to bytes32 for contract calls
   // If already a hex string (hashed), use it directly; otherwise convert
@@ -1002,7 +998,6 @@ export default function CreatePage() {
 
     // Reset state
     setCreateError("");
-    setDebugInfo([]);
     resetApprove();
     resetCreateDish();
     resetMint();
@@ -1516,14 +1511,20 @@ export default function CreatePage() {
         {step === 4 && selectedRestaurant && (
           <div className="space-y-6">
             {dishExists && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                <p className="font-medium text-yellow-800 mb-1">
-                  Dish Already Exists
-                </p>
-                <p className="text-sm text-yellow-700">
-                  This dish has already been created. You will only be minting{" "}
-                  {mintTokenAmount} token(s), not creating a new dish.
-                </p>
+              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-5 h-5 rounded-full bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="text-amber-600 text-xs">!</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-amber-800 mb-0.5">
+                      Dish Already Exists
+                    </p>
+                    <p className="text-sm text-amber-700">
+                      You will only be minting {mintTokenAmount} token(s).
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
             <div className="bg-white border border-gray-200 rounded-2xl p-6">
@@ -1543,7 +1544,7 @@ export default function CreatePage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Network</span>
-                  <span className="font-medium text-blue-600">
+                  <span className="font-medium text-indigo-600">
                     Base Sepolia
                   </span>
                 </div>
@@ -1558,23 +1559,23 @@ export default function CreatePage() {
                         setMintTokenAmount(Math.max(1, mintTokenAmount - 1))
                       }
                       disabled={isCreating}
-                      className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <span className="text-xl text-gray-600">-</span>
+                      <span className="text-xl text-slate-600">−</span>
                     </button>
                     <div className="flex-1 text-center">
-                      <p className="text-3xl font-bold text-gray-900">
+                      <p className="text-3xl font-bold text-slate-900">
                         {mintTokenAmount}
                       </p>
-                      <p className="text-sm text-gray-500">Stamps</p>
+                      <p className="text-sm text-slate-500">Stamps</p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setMintTokenAmount(mintTokenAmount + 1)}
                       disabled={isCreating}
-                      className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <span className="text-xl text-gray-600">+</span>
+                      <span className="text-xl text-slate-600">+</span>
                     </button>
                   </div>
                   <div className="flex justify-between items-center pt-3 border-t border-gray-100">
@@ -1596,34 +1597,20 @@ export default function CreatePage() {
 
             {/* Progress Info */}
             {isCreating && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
-                  <p className="font-medium text-blue-800">
+                  <div className="w-5 h-5 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
+                  <p className="text-sm font-medium text-indigo-700">
                     {getProgressMessage()}
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Debug Info */}
-            {debugInfo.length > 0 && (
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
-                <p className="text-xs text-gray-500 font-medium mb-1">
-                  Progress:
-                </p>
-                <div className="text-xs text-gray-600 space-y-0.5 font-mono">
-                  {debugInfo.map((info, i) => (
-                    <p key={i}>{info}</p>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Error */}
             {displayError && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                <p className="text-red-700 text-sm">{displayError}</p>
+              <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4">
+                <p className="text-rose-600 text-sm">{displayError}</p>
               </div>
             )}
 
