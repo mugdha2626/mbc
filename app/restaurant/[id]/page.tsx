@@ -245,24 +245,24 @@ export default function RestaurantPage() {
                     </p>
                     <div className="bg-gray-50 rounded-lg p-2 mb-3">
                       <p className="text-xs font-mono text-gray-700 text-center">
-                        Rating = Avg. Price × 10
+                        Rating = Avg. Price
                       </p>
                     </div>
                     <div className="space-y-1.5 text-xs text-gray-500">
                       <div className="flex justify-between">
-                        <span>$0.10 avg</span>
+                        <span>$1.00 avg</span>
                         <span className="text-yellow-600 font-medium">
                           1.0 rating
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span>$2.00 avg</span>
+                        <span>$20.00 avg</span>
                         <span className="text-yellow-600 font-medium">
                           20.0 rating
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span>$10.00+ avg</span>
+                        <span>$100.00+ avg</span>
                         <span className="text-yellow-600 font-medium">
                           100.0 max
                         </span>

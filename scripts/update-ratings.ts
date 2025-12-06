@@ -14,7 +14,7 @@ function calculateRatingFromPrices(dishes: { currentPrice: number }[]): number {
   }
 
   const avgPrice = dishes.reduce((sum, d) => sum + (d.currentPrice || 0), 0) / dishes.length;
-  const rating = Math.min(avgPrice * 10, 100);
+  const rating = Math.min(avgPrice, 100);
 
   return Math.round(rating * 10) / 10;
 }

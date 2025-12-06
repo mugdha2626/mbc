@@ -5,6 +5,7 @@ import { baseSepolia } from "viem/chains";
 import { TMAP_DISHES_ADDRESS, TMAP_DISHES_ABI } from "@/lib/contracts";
 import { removeFromWishlist } from "@/lib/db/users";
 import { recordReferral } from "@/lib/db/referrals";
+import { updateRestaurantRating } from "@/lib/db/restaurants";
 
 // Create a public client to read from the contract
 const publicClient = createPublicClient({
@@ -127,6 +128,12 @@ export async function POST(request: NextRequest) {
     };
 
     await db.collection("dishes").updateOne({ dishId }, dishUpdateQuery);
+
+    // Update restaurant rating (price changed, so rating may change)
+    const dish = await db.collection("dishes").findOne({ dishId });
+    if (dish?.restaurant) {
+      await updateRestaurantRating(dish.restaurant);
+    }
 
     // Update minter's portfolio
     if (isNewHolder) {

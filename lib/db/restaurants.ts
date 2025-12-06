@@ -8,10 +8,10 @@ const USERS_COLLECTION = "users";
 /**
  * Calculate the tmapRating for a restaurant based on the average currentPrice of its dishes.
  *
- * Formula: Rating = Average Price × 10 (capped at 100)
- * - $0.10 starting price = 1.0 rating
- * - $2.00 = 20.0 rating
- * - $10.00 = 100.0 rating (max)
+ * Formula: Rating = Average Price (capped at 100)
+ * - $1.00 starting price = 1.0 rating
+ * - $20.00 = 20.0 rating
+ * - $100.00 = 100.0 rating (max)
  */
 export function calculateRatingFromPrices(dishes: { currentPrice: number }[]): number {
   if (!dishes || dishes.length === 0) {
@@ -19,7 +19,7 @@ export function calculateRatingFromPrices(dishes: { currentPrice: number }[]): n
   }
 
   const avgPrice = dishes.reduce((sum, d) => sum + (d.currentPrice || 0), 0) / dishes.length;
-  const rating = Math.min(avgPrice * 10, 100);
+  const rating = Math.min(avgPrice, 100);
 
   // Round to 1 decimal place
   return Math.round(rating * 10) / 10;
