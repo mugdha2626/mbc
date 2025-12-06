@@ -6,6 +6,7 @@ import { BottomNav } from "./components/layout/BottomNav";
 import { GoogleMapView } from "./components/map/GoogleMapView";
 import { getCurrentPosition } from "@/lib/geo";
 import { Dish } from "./interface";
+import { sdk } from '@farcaster/miniapp-sdk';
 
 interface SearchResult {
   id: string;
@@ -48,6 +49,10 @@ export default function Home() {
   } | null>(null);
   const [nearbyCount, setNearbyCount] = useState<number | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    sdk.actions.ready();
+}, []);
 
   // Fetch user's current location on mount
   useEffect(() => {
