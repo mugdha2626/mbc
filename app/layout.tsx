@@ -54,6 +54,7 @@ export const metadata: Metadata = {
         },
       },
     }),
+    "base:app_id": "69548a964d3a403912ed86f8",
   },
 };
 
